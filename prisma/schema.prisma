@@ -1,0 +1,240 @@
+// Workforce Management Application - Database Schema
+// PostgreSQL with Prisma ORM
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// USER & AUTHENTICATION
+// ============================================
+
+enum UserRole {
+  ADMIN
+  SUPERVISOR
+  AGENT
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  password      String    // Hashed password
+  role          UserRole  @default(AGENT)
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Optional link to Agent profile (for agents who are also users)
+  agentProfile  Agent?
+
+  // Audit trail
+  createdSchedules  ScheduleEntry[] @relation("CreatedBy")
+  modifiedSchedules ScheduleEntry[] @relation("ModifiedBy")
+
+  @@index([email])
+  @@index([role])
+}
+
+// ============================================
+// AGENTS (Schedulable Employees)
+// ============================================
+
+model Agent {
+  id           String    @id @default(cuid())
+  employeeId   String    @unique  // External employee ID
+  firstName    String
+  lastName     String
+  email        String    @unique
+  phone        String?
+  hireDate     DateTime
+  isActive     Boolean   @default(true)
+  displayOrder Int       @default(0)  // For grid ordering
+  color        String?   // Optional agent-specific color
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  // Optional link to user account
+  userId       String?   @unique
+  user         User?     @relation(fields: [userId], references: [id])
+
+  // Agent's skills/qualifications (for future queue assignment)
+  skills       AgentSkill[]
+
+  // Schedule entries for this agent
+  scheduleEntries ScheduleEntry[]
+
+  @@index([isActive])
+  @@index([displayOrder])
+}
+
+model Skill {
+  id          String       @id @default(cuid())
+  name        String       @unique
+  description String?
+  agents      AgentSkill[]
+}
+
+model AgentSkill {
+  id        String   @id @default(cuid())
+  agentId   String
+  skillId   String
+  level     Int      @default(1)  // Proficiency level 1-5
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  skill     Skill    @relation(fields: [skillId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, skillId])
+}
+
+// ============================================
+// ACTIVITY TYPES
+// ============================================
+
+enum ActivityCategory {
+  WORK           // Working shifts, on-phone time
+  BREAK          // Lunches, breaks
+  TRAINING       // Training, education
+  MEETING        // Meetings
+  PROJECT        // Projects, special work
+  TIME_OFF       // PTO, sick, holiday
+  CUSTOM         // User-defined
+}
+
+model ActivityType {
+  id              String           @id @default(cuid())
+  name            String           @unique
+  shortName       String           // 3-4 char abbreviation for grid display
+  description     String?
+  category        ActivityCategory
+  color           String           // Hex color code (e.g., "#4CAF50")
+  textColor       String           @default("#FFFFFF")  // Text color for contrast
+  isPaid          Boolean          @default(true)
+  countsAsWorking Boolean          @default(true)  // Counts toward staffing
+  isActive        Boolean          @default(true)
+  isSystemType    Boolean          @default(false) // Cannot be deleted
+  displayOrder    Int              @default(0)
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  scheduleEntries ScheduleEntry[]
+
+  @@index([isActive])
+  @@index([category])
+}
+
+// ============================================
+// SCHEDULE ENTRIES
+// ============================================
+
+model ScheduleEntry {
+  id              String       @id @default(cuid())
+  agentId         String
+  activityTypeId  String
+  date            DateTime     @db.Date  // Date portion only
+  startTime       DateTime     // Full datetime for start
+  endTime         DateTime     // Full datetime for end
+  notes           String?
+  isPublished     Boolean      @default(false)
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+
+  // Audit fields
+  createdById     String
+  modifiedById    String?
+
+  agent           Agent        @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  activityType    ActivityType @relation(fields: [activityTypeId], references: [id])
+  createdBy       User         @relation("CreatedBy", fields: [createdById], references: [id])
+  modifiedBy      User?        @relation("ModifiedBy", fields: [modifiedById], references: [id])
+
+  @@index([agentId, date])
+  @@index([date])
+  @@index([activityTypeId])
+  @@index([startTime, endTime])
+}
+
+// ============================================
+// STAFFING REQUIREMENTS
+// ============================================
+
+model StaffingRequirement {
+  id                String   @id @default(cuid())
+  dayOfWeek         Int      // 0 = Sunday, 6 = Saturday
+  intervalStart     String   // Time as "HH:MM" (e.g., "08:00")
+  requiredStaff     Int      // Number of agents needed
+  minimumStaff      Int?     // Minimum acceptable (for alerts)
+  isActive          Boolean  @default(true)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([dayOfWeek, intervalStart])
+  @@index([dayOfWeek])
+}
+
+// For date-specific overrides (holidays, special events)
+model StaffingOverride {
+  id                String   @id @default(cuid())
+  date              DateTime @db.Date
+  intervalStart     String   // Time as "HH:MM"
+  requiredStaff     Int
+  minimumStaff      Int?
+  reason            String?  // e.g., "Holiday", "Marketing Campaign"
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([date, intervalStart])
+  @@index([date])
+}
+
+// ============================================
+// SCHEDULE TEMPLATES (for quick assignment)
+// ============================================
+
+model ScheduleTemplate {
+  id          String                @id @default(cuid())
+  name        String
+  description String?
+  isActive    Boolean               @default(true)
+  createdAt   DateTime              @default(now())
+  updatedAt   DateTime              @updatedAt
+
+  entries     ScheduleTemplateEntry[]
+}
+
+model ScheduleTemplateEntry {
+  id              String           @id @default(cuid())
+  templateId      String
+  dayOfWeek       Int              // 0-6
+  startTime       String           // "HH:MM"
+  endTime         String           // "HH:MM"
+  activityTypeId  String
+
+  template        ScheduleTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@index([templateId])
+}
+
+// ============================================
+// AUDIT LOG
+// ============================================
+
+model AuditLog {
+  id          String   @id @default(cuid())
+  userId      String
+  action      String   // CREATE, UPDATE, DELETE
+  entityType  String   // ScheduleEntry, Agent, etc.
+  entityId    String
+  oldValue    Json?
+  newValue    Json?
+  timestamp   DateTime @default(now())
+  ipAddress   String?
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([timestamp])
+}
