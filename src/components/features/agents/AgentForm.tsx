@@ -5,7 +5,7 @@ import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { HexColorPicker } from "react-colorful";
 import { format } from "date-fns";
-import { MockAgent } from "@/lib/mock-data";
+import { Agent } from "@/hooks/useAgents";
 import {
   Dialog,
   DialogContent,
@@ -21,7 +21,7 @@ import { agentSchema, AgentInput, getRandomAgentColor, agentColors } from "@/typ
 interface AgentFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  agent?: MockAgent | null;
+  agent?: Agent | null;
   onSubmit: (data: AgentInput) => Promise<void>;
   isLoading?: boolean;
 }

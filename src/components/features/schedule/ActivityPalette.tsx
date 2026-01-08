@@ -1,18 +1,22 @@
 "use client";
 
 import { useDraggable } from "@dnd-kit/core";
-import { mockActivityTypes, MockActivityType } from "@/lib/mock-data";
+import { ActivityType } from "@/hooks/useActivities";
 import { GripVertical } from "lucide-react";
 
-export function ActivityPalette() {
+interface ActivityPaletteProps {
+  activities: ActivityType[];
+}
+
+export function ActivityPalette({ activities }: ActivityPaletteProps) {
   // Group activities by category
-  const groupedActivities = mockActivityTypes.reduce((acc, activity) => {
+  const groupedActivities = activities.reduce((acc, activity) => {
     if (!acc[activity.category]) {
       acc[activity.category] = [];
     }
     acc[activity.category].push(activity);
     return acc;
-  }, {} as Record<string, MockActivityType[]>);
+  }, {} as Record<string, ActivityType[]>);
 
   const categoryLabels: Record<string, string> = {
     WORK: "Work",
@@ -56,7 +60,7 @@ export function ActivityPalette() {
   );
 }
 
-function DraggableActivity({ activity }: { activity: MockActivityType }) {
+function DraggableActivity({ activity }: { activity: ActivityType }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({
     id: `palette-${activity.id}`,
   });

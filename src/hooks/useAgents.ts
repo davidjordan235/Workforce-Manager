@@ -1,137 +1,108 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { mockAgents, MockAgent } from "@/lib/mock-data";
 import { AgentInput, getRandomAgentColor } from "@/types/agent";
 
-// In-memory store for mock data
-let agents = [...mockAgents];
+// Agent type from database
+export type Agent = {
+  id: string;
+  employeeId: string;
+  firstName: string;
+  lastName: string;
+  email: string;
+  phone: string | null;
+  hireDate: string;
+  isActive: boolean;
+  displayOrder: number;
+  color: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
 
-// Simulate API delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Fetch all agents from API
+async function fetchAgents(search?: string): Promise<Agent[]> {
+  const params = new URLSearchParams();
+  if (search) params.set("search", search);
 
-// Fetch all agents (mock)
-async function fetchAgents(search?: string): Promise<MockAgent[]> {
-  await delay(300);
-
-  let result = agents.filter(a => a.isActive);
-
-  if (search) {
-    const searchLower = search.toLowerCase();
-    result = result.filter(a =>
-      a.firstName.toLowerCase().includes(searchLower) ||
-      a.lastName.toLowerCase().includes(searchLower) ||
-      a.email.toLowerCase().includes(searchLower) ||
-      a.employeeId.toLowerCase().includes(searchLower)
-    );
+  const response = await fetch(`/api/agents?${params}`);
+  if (!response.ok) {
+    throw new Error("Failed to fetch agents");
   }
-
-  return result.sort((a, b) => a.displayOrder - b.displayOrder);
+  return response.json();
 }
 
-// Fetch single agent (mock)
-async function fetchAgent(id: string): Promise<MockAgent | null> {
-  await delay(200);
-  return agents.find(a => a.id === id) || null;
+// Fetch single agent from API
+async function fetchAgent(id: string): Promise<Agent | null> {
+  const response = await fetch(`/api/agents/${id}`);
+  if (response.status === 404) return null;
+  if (!response.ok) {
+    throw new Error("Failed to fetch agent");
+  }
+  return response.json();
 }
 
-// Create a new agent (mock)
-async function createAgent(data: AgentInput): Promise<MockAgent> {
-  await delay(300);
+// Create a new agent via API
+async function createAgent(data: AgentInput): Promise<Agent> {
+  const response = await fetch("/api/agents", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      ...data,
+      color: data.color || getRandomAgentColor(),
+    }),
+  });
 
-  // Check for duplicate employee ID
-  const existingById = agents.find(a => a.employeeId === data.employeeId);
-  if (existingById) {
-    throw new Error("An agent with this employee ID already exists");
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to create agent");
   }
 
-  // Check for duplicate email
-  const existingByEmail = agents.find(a => a.email === data.email);
-  if (existingByEmail) {
-    throw new Error("An agent with this email already exists");
-  }
-
-  const newAgent: MockAgent = {
-    id: `agent-${Date.now()}`,
-    employeeId: data.employeeId,
-    firstName: data.firstName,
-    lastName: data.lastName,
-    email: data.email,
-    phone: data.phone || null,
-    hireDate: new Date(data.hireDate),
-    isActive: true,
-    displayOrder: agents.length + 1,
-    color: data.color || getRandomAgentColor(),
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  agents.push(newAgent);
-  return newAgent;
+  return response.json();
 }
 
-// Update an agent (mock)
+// Update an agent via API
 async function updateAgent({
   id,
   data,
 }: {
   id: string;
   data: Partial<AgentInput>;
-}): Promise<MockAgent> {
-  await delay(300);
-
-  const index = agents.findIndex(a => a.id === id);
-  if (index === -1) {
-    throw new Error("Agent not found");
-  }
-
-  // Check for duplicate employee ID
-  if (data.employeeId && data.employeeId !== agents[index].employeeId) {
-    const conflict = agents.find(a => a.employeeId === data.employeeId && a.id !== id);
-    if (conflict) {
-      throw new Error("An agent with this employee ID already exists");
-    }
-  }
-
-  // Check for duplicate email
-  if (data.email && data.email !== agents[index].email) {
-    const conflict = agents.find(a => a.email === data.email && a.id !== id);
-    if (conflict) {
-      throw new Error("An agent with this email already exists");
-    }
-  }
-
-  agents[index] = {
-    ...agents[index],
-    ...data,
-    hireDate: data.hireDate ? new Date(data.hireDate) : agents[index].hireDate,
-    updatedAt: new Date(),
-  };
-
-  return agents[index];
-}
-
-// Delete an agent (mock - soft delete)
-async function deleteAgent(id: string): Promise<void> {
-  await delay(300);
-
-  const index = agents.findIndex(a => a.id === id);
-  if (index === -1) {
-    throw new Error("Agent not found");
-  }
-
-  // Soft delete
-  agents[index].isActive = false;
-}
-
-// Reorder agents (mock)
-async function reorderAgents(orderedIds: string[]): Promise<void> {
-  await delay(200);
-
-  orderedIds.forEach((id, index) => {
-    const agentIndex = agents.findIndex(a => a.id === id);
-    if (agentIndex !== -1) {
-      agents[agentIndex].displayOrder = index + 1;
-    }
+}): Promise<Agent> {
+  const response = await fetch(`/api/agents/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
   });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to update agent");
+  }
+
+  return response.json();
+}
+
+// Delete an agent via API (soft delete)
+async function deleteAgent(id: string): Promise<void> {
+  const response = await fetch(`/api/agents/${id}`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to delete agent");
+  }
+}
+
+// Reorder agents via API
+async function reorderAgents(orderedIds: string[]): Promise<void> {
+  const response = await fetch("/api/agents/reorder", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ orderedIds }),
+  });
+
+  if (!response.ok) {
+    throw new Error("Failed to reorder agents");
+  }
 }
 
 // Hook to fetch agents

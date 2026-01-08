@@ -11,16 +11,18 @@ import {
   DragEndEvent,
   DragOverEvent,
 } from "@dnd-kit/core";
-import { format } from "date-fns";
-import { MockScheduleEntry, MockActivityType, mockActivityTypes } from "@/lib/mock-data";
-import { useScheduleByDate, useMoveScheduleEntry, useCreateScheduleEntry, useUpdateScheduleEntry, useDeleteScheduleEntry } from "@/hooks/useSchedule";
+import { format, addDays } from "date-fns";
+import { useScheduleExtended, useMoveScheduleEntry, useCreateScheduleEntry, useUpdateScheduleEntry, useDeleteScheduleEntry, ExtendedScheduleEntry, ScheduleEntry } from "@/hooks/useSchedule";
 import { useAgents } from "@/hooks/useAgents";
-import { generateTimeSlots, getTimeSlotIndex, getTimeFromSlotIndex } from "@/types/schedule";
+import { useActivities, ActivityType } from "@/hooks/useActivities";
+import { generateExtendedTimeSlots, getTimeAndDateFromExtendedIndex, getSlotSpan, EXTENDED_SLOTS } from "@/types/schedule";
 import { TimeHeader } from "./TimeHeader";
 import { ScheduleRow } from "./ScheduleRow";
 import { StaffingTotals } from "./StaffingTotals";
 import { ActivityPalette } from "./ActivityPalette";
-import { Loader2 } from "lucide-react";
+import { ScheduleEntryDialog } from "./ScheduleEntryDialog";
+import { Button } from "@/components/ui/button";
+import { Loader2, Plus } from "lucide-react";
 
 interface ScheduleGridProps {
   date: Date;
@@ -28,20 +30,24 @@ interface ScheduleGridProps {
 
 export function ScheduleGrid({ date }: ScheduleGridProps) {
   const dateString = format(date, "yyyy-MM-dd");
-  const timeSlots = useMemo(() => generateTimeSlots(), []);
+  const nextDate = addDays(date, 1);
+  const nextDateLabel = format(nextDate, "M/d");
+  const timeSlots = useMemo(() => generateExtendedTimeSlots(), []);
 
-  const { data: scheduleEntries, isLoading: scheduleLoading } = useScheduleByDate(dateString);
+  const { data: extendedData, isLoading: scheduleLoading } = useScheduleExtended(dateString);
   const { data: agents, isLoading: agentsLoading } = useAgents();
+  const { data: activities, isLoading: activitiesLoading } = useActivities();
   const moveMutation = useMoveScheduleEntry();
   const createMutation = useCreateScheduleEntry();
   const updateMutation = useUpdateScheduleEntry();
   const deleteMutation = useDeleteScheduleEntry();
 
-  const [activeActivity, setActiveActivity] = useState<MockActivityType | null>(null);
+  const [activeActivity, setActiveActivity] = useState<ActivityType | null>(null);
   const [dragOverInfo, setDragOverInfo] = useState<{ agentId: string; slotIndex: number } | null>(null);
   const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
   const [pasteTarget, setPasteTarget] = useState<{ agentId: string; slotIndex: number } | null>(null);
-  const [clipboard, setClipboard] = useState<{ entry: MockScheduleEntry; isCut: boolean } | null>(null);
+  const [clipboard, setClipboard] = useState<{ entry: ExtendedScheduleEntry; isCut: boolean } | null>(null);
+  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
@@ -52,10 +58,13 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
     })
   );
 
+  // Get schedule entries from extended data
+  const scheduleEntries = extendedData?.entries ?? [];
+
   // Group schedule entries by agent
   const entriesByAgent = useMemo(() => {
-    const map: Record<string, MockScheduleEntry[]> = {};
-    scheduleEntries?.forEach(entry => {
+    const map: Record<string, ExtendedScheduleEntry[]> = {};
+    scheduleEntries.forEach(entry => {
       if (!map[entry.agentId]) {
         map[entry.agentId] = [];
       }
@@ -64,7 +73,7 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
     return map;
   }, [scheduleEntries]);
 
-  // Handle keyboard events for delete, cut, copy, paste
+  // Handle keyboard events for delete, cut, copy, paste, and activity shortcuts
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
       // Delete selected entry
@@ -83,7 +92,7 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
       // Copy (Ctrl+C)
       if ((e.ctrlKey || e.metaKey) && e.key === "c" && selectedEntryId) {
         e.preventDefault();
-        const entry = scheduleEntries?.find(ent => ent.id === selectedEntryId);
+        const entry = scheduleEntries.find(ent => ent.id === selectedEntryId);
         if (entry) {
           setClipboard({ entry, isCut: false });
         }
@@ -92,7 +101,7 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
       // Cut (Ctrl+X)
       if ((e.ctrlKey || e.metaKey) && e.key === "x" && selectedEntryId) {
         e.preventDefault();
-        const entry = scheduleEntries?.find(ent => ent.id === selectedEntryId);
+        const entry = scheduleEntries.find(ent => ent.id === selectedEntryId);
         if (entry) {
           setClipboard({ entry, isCut: true });
         }
@@ -102,16 +111,19 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
       if ((e.ctrlKey || e.metaKey) && e.key === "v" && clipboard && pasteTarget) {
         e.preventDefault();
         const { entry, isCut } = clipboard;
-        const duration = getTimeSlotIndex(entry.endTime) - getTimeSlotIndex(entry.startTime);
-        const newEndSlotIndex = Math.min(pasteTarget.slotIndex + duration, 48);
-        const newStartTime = getTimeFromSlotIndex(pasteTarget.slotIndex);
-        const newEndTime = getTimeFromSlotIndex(newEndSlotIndex);
+        // Use getSlotSpan which handles overnight shifts correctly
+        const duration = getSlotSpan(entry.startTime, entry.endTime);
+        const newEndSlotIndex = Math.min(pasteTarget.slotIndex + duration, EXTENDED_SLOTS);
+
+        // Get time and date from extended slot indices
+        const { time: newStartTime, date: newStartDate } = getTimeAndDateFromExtendedIndex(pasteTarget.slotIndex, dateString);
+        const { time: newEndTime } = getTimeAndDateFromExtendedIndex(newEndSlotIndex, dateString);
 
         // Create new entry at paste target
         createMutation.mutate({
           agentId: pasteTarget.agentId,
           activityTypeId: entry.activityTypeId,
-          date: dateString,
+          date: newStartDate,
           startTime: newStartTime,
           endTime: newEndTime,
         });
@@ -125,11 +137,38 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
         setPasteTarget(null);
         setSelectedEntryId(null);
       }
+
+      // Activity shortcut: press first letter of activity name to fill slot
+      if (pasteTarget && activities && e.key.length === 1 && /[a-zA-Z]/.test(e.key) && !e.ctrlKey && !e.metaKey && !e.altKey) {
+        const pressedKey = e.key.toLowerCase();
+        const matchingActivities = activities.filter(a =>
+          a.name.toLowerCase().startsWith(pressedKey)
+        );
+
+        if (matchingActivities.length > 0) {
+          e.preventDefault();
+          const activity = matchingActivities[0]; // Use first match
+          const endSlotIndex = Math.min(pasteTarget.slotIndex + 2, EXTENDED_SLOTS); // Default 1 hour
+
+          const { time: startTime, date: startDate } = getTimeAndDateFromExtendedIndex(pasteTarget.slotIndex, dateString);
+          const { time: endTime } = getTimeAndDateFromExtendedIndex(endSlotIndex, dateString);
+
+          createMutation.mutate({
+            agentId: pasteTarget.agentId,
+            activityTypeId: activity.id,
+            date: startDate,
+            startTime: startTime,
+            endTime: endTime,
+          });
+
+          setPasteTarget(null);
+        }
+      }
     };
 
     window.addEventListener("keydown", handleKeyDown);
     return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [selectedEntryId, clipboard, pasteTarget, scheduleEntries, deleteMutation, createMutation, dateString]);
+  }, [selectedEntryId, clipboard, pasteTarget, scheduleEntries, activities, deleteMutation, createMutation, dateString]);
 
   // Click outside to deselect
   const handleContainerClick = useCallback((e: React.MouseEvent) => {
@@ -151,10 +190,10 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
     setSelectedEntryId(null); // Clear entry selection when selecting paste target
   }, []);
 
-  // Handle entry move (within same row, using react-rnd)
+  // Handle entry move (within same row, using react-rnd) - now with optional date
   const handleEntryMove = useCallback(
-    (entryId: string, newStartTime: string, newEndTime: string) => {
-      const entry = scheduleEntries?.find(e => e.id === entryId);
+    (entryId: string, newStartTime: string, newEndTime: string, newDate?: string) => {
+      const entry = scheduleEntries.find(e => e.id === entryId);
       if (!entry) return;
 
       updateMutation.mutate({
@@ -162,24 +201,67 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
         data: {
           startTime: newStartTime,
           endTime: newEndTime,
+          ...(newDate && { date: newDate }),
         },
       });
     },
     [scheduleEntries, updateMutation]
   );
 
-  // Handle entry resize (using react-rnd)
+  // Handle entry resize (using react-rnd) - now with optional date
   const handleEntryResize = useCallback(
-    (entryId: string, newStartTime: string, newEndTime: string) => {
+    (entryId: string, newStartTime: string, newEndTime: string, newDate?: string) => {
       updateMutation.mutate({
         id: entryId,
         data: {
           startTime: newStartTime,
           endTime: newEndTime,
+          ...(newDate && { date: newDate }),
         },
       });
     },
     [updateMutation]
+  );
+
+  // Handle entry copy (from context menu)
+  const handleEntryCopy = useCallback(
+    (entry: ExtendedScheduleEntry) => {
+      setClipboard({ entry, isCut: false });
+      setSelectedEntryId(entry.id);
+    },
+    []
+  );
+
+  // Handle entry cut (from context menu)
+  const handleEntryCut = useCallback(
+    (entry: ExtendedScheduleEntry) => {
+      setClipboard({ entry, isCut: true });
+      setSelectedEntryId(entry.id);
+    },
+    []
+  );
+
+  // Handle entry delete (from context menu)
+  const handleEntryDelete = useCallback(
+    (entryId: string) => {
+      deleteMutation.mutate(entryId);
+      setSelectedEntryId(null);
+    },
+    [deleteMutation]
+  );
+
+  // Handle dialog submit for creating entries (supports overnight shifts)
+  const handleDialogSubmit = useCallback(
+    async (data: { agentId: string; activityTypeId: string; startTime: string; endTime: string }) => {
+      await createMutation.mutateAsync({
+        agentId: data.agentId,
+        activityTypeId: data.activityTypeId,
+        date: dateString,
+        startTime: data.startTime,
+        endTime: data.endTime,
+      });
+    },
+    [createMutation, dateString]
   );
 
   // Handle palette drag start (for creating new entries)
@@ -188,7 +270,7 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
 
     if (active.id.toString().startsWith("palette-")) {
       const activityId = active.id.toString().replace("palette-", "");
-      const activity = mockActivityTypes.find(a => a.id === activityId);
+      const activity = activities?.find(a => a.id === activityId);
       setActiveActivity(activity || null);
     }
   };
@@ -225,23 +307,25 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
     const parts = overId.split("-slot-");
     const targetAgentId = parts[0];
     const targetSlotIndex = parseInt(parts[1]);
-    const targetTime = getTimeFromSlotIndex(targetSlotIndex);
+
+    // Get time and date from extended slot index
+    const { time: targetTime, date: targetDate } = getTimeAndDateFromExtendedIndex(targetSlotIndex, dateString);
 
     // Create new entry
     const activityId = active.id.toString().replace("palette-", "");
-    const endSlotIndex = Math.min(targetSlotIndex + 2, 48); // Default 1 hour duration
-    const endTime = getTimeFromSlotIndex(endSlotIndex);
+    const endSlotIndex = Math.min(targetSlotIndex + 2, EXTENDED_SLOTS); // Default 1 hour duration
+    const { time: endTime } = getTimeAndDateFromExtendedIndex(endSlotIndex, dateString);
 
     createMutation.mutate({
       agentId: targetAgentId,
       activityTypeId: activityId,
-      date: dateString,
+      date: targetDate,
       startTime: targetTime,
       endTime: endTime,
     });
   };
 
-  if (scheduleLoading || agentsLoading) {
+  if (scheduleLoading || agentsLoading || activitiesLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -267,7 +351,7 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
           <div className="h-full overflow-auto">
             <div className="min-w-max">
               {/* Time Header */}
-              <TimeHeader timeSlots={timeSlots} />
+              <TimeHeader timeSlots={timeSlots} nextDateLabel={nextDateLabel} />
 
               {/* Agent Rows */}
               <div>
@@ -277,6 +361,8 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
                     agent={agent}
                     timeSlots={timeSlots}
                     entries={entriesByAgent[agent.id] || []}
+                    activities={activities || []}
+                    baseDate={dateString}
                     dragOverInfo={dragOverInfo}
                     selectedEntryId={selectedEntryId}
                     pasteTarget={pasteTarget?.agentId === agent.id ? pasteTarget : null}
@@ -285,6 +371,9 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
                     onSlotClick={handleSlotClick}
                     onEntryMove={handleEntryMove}
                     onEntryResize={handleEntryResize}
+                    onEntryCopy={handleEntryCopy}
+                    onEntryCut={handleEntryCut}
+                    onEntryDelete={handleEntryDelete}
                   />
                 ))}
               </div>
@@ -292,14 +381,26 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
               {/* Staffing Totals Footer */}
               <StaffingTotals
                 timeSlots={timeSlots}
-                entries={scheduleEntries || []}
+                entries={scheduleEntries}
+                activities={activities || []}
+                baseDate={dateString}
               />
             </div>
           </div>
         </div>
 
-        {/* Activity Palette */}
-        <ActivityPalette />
+        {/* Activity Palette and Add Button */}
+        <div className="flex flex-col gap-2">
+          <Button
+            onClick={() => setIsAddDialogOpen(true)}
+            className="w-full"
+            variant="outline"
+          >
+            <Plus className="h-4 w-4 mr-2" />
+            Add Entry
+          </Button>
+          <ActivityPalette activities={activities || []} />
+        </div>
       </div>
 
       {/* Drag Overlay for palette items */}
@@ -316,6 +417,17 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
           </div>
         )}
       </DragOverlay>
+
+      {/* Add Entry Dialog (supports overnight shifts) */}
+      <ScheduleEntryDialog
+        open={isAddDialogOpen}
+        onOpenChange={setIsAddDialogOpen}
+        agents={agents || []}
+        activities={activities || []}
+        date={dateString}
+        onSubmit={handleDialogSubmit}
+        isLoading={createMutation.isPending}
+      />
     </DndContext>
   );
 }

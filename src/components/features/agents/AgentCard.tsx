@@ -1,7 +1,7 @@
 "use client";
 
 import { format } from "date-fns";
-import { MockAgent } from "@/lib/mock-data";
+import { Agent } from "@/hooks/useAgents";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,9 +13,9 @@ import {
 import { MoreVertical, Pencil, Trash2, Mail, Phone, Calendar } from "lucide-react";
 
 interface AgentCardProps {
-  agent: MockAgent;
-  onEdit: (agent: MockAgent) => void;
-  onDelete: (agent: MockAgent) => void;
+  agent: Agent;
+  onEdit: (agent: Agent) => void;
+  onDelete: (agent: Agent) => void;
 }
 
 export function AgentCard({ agent, onEdit, onDelete }: AgentCardProps) {

@@ -1,12 +1,15 @@
 "use client";
 
 import { useMemo } from "react";
-import { MockScheduleEntry, mockActivityTypes } from "@/lib/mock-data";
-import { TimeSlot, getTimeSlotIndex } from "@/types/schedule";
+import { ExtendedScheduleEntry } from "@/hooks/useSchedule";
+import { ActivityType } from "@/hooks/useActivities";
+import { ExtendedTimeSlot, getExtendedSlotIndex, MIDNIGHT_SLOT_INDEX } from "@/types/schedule";
 
 interface StaffingTotalsProps {
-  timeSlots: TimeSlot[];
-  entries: MockScheduleEntry[];
+  timeSlots: ExtendedTimeSlot[];
+  entries: ExtendedScheduleEntry[];
+  activities: ActivityType[];
+  baseDate: string;
 }
 
 // Define the categories we want to show with their display info
@@ -20,7 +23,7 @@ const categoryConfig = [
   { category: "TIME_OFF", label: "Time Off", color: "#F44336" },
 ];
 
-export function StaffingTotals({ timeSlots, entries }: StaffingTotalsProps) {
+export function StaffingTotals({ timeSlots, entries, activities, baseDate }: StaffingTotalsProps) {
   // Calculate totals per slot per category
   const totalsPerSlot = useMemo(() => {
     // Initialize totals for each category
@@ -30,13 +33,15 @@ export function StaffingTotals({ timeSlots, entries }: StaffingTotalsProps) {
     });
 
     entries.forEach(entry => {
-      const startIndex = getTimeSlotIndex(entry.startTime);
-      const endIndex = getTimeSlotIndex(entry.endTime);
-      const activityType = mockActivityTypes.find(a => a.id === entry.activityTypeId);
+      const startIndex = getExtendedSlotIndex(entry.startTime, entry.date, baseDate, false);
+      const endIndex = getExtendedSlotIndex(entry.endTime, entry.date, baseDate, true);
+      // Handle entries that wrap around (end index < start index means next day)
+      const actualEnd = endIndex <= startIndex ? endIndex + 48 : endIndex;
+      const activityType = activities.find(a => a.id === entry.activityTypeId);
 
       if (!activityType) return;
 
-      for (let i = startIndex; i < endIndex && i < timeSlots.length; i++) {
+      for (let i = startIndex; i < actualEnd && i < timeSlots.length; i++) {
         // Increment total
         categoryTotals["TOTAL"][i]++;
 
@@ -50,7 +55,7 @@ export function StaffingTotals({ timeSlots, entries }: StaffingTotalsProps) {
     });
 
     return categoryTotals;
-  }, [entries, timeSlots.length]);
+  }, [entries, timeSlots.length, activities, baseDate]);
 
   return (
     <div className="border-t-2 border-gray-300">
@@ -77,13 +82,17 @@ export function StaffingTotals({ timeSlots, entries }: StaffingTotalsProps) {
           {timeSlots.map((slot, index) => {
             const count = totalsPerSlot[category][index];
             const isTotal = category === "TOTAL";
+            const isMidnight = index === MIDNIGHT_SLOT_INDEX;
+            const isNextDay = index >= MIDNIGHT_SLOT_INDEX;
 
             return (
               <div
-                key={slot.time}
+                key={`${slot.dayOffset}-${slot.time}`}
                 className={`w-10 flex-shrink-0 border-r flex items-center justify-center ${
                   slot.minute === 0 ? "border-r-gray-300" : "border-r-gray-200"
-                } ${slot.hour % 2 === 0 ? "bg-gray-50" : "bg-white"}`}
+                } ${isNextDay ? "bg-blue-50/30" : slot.hour % 2 === 0 ? "bg-gray-50" : "bg-white"} ${
+                  isMidnight ? "border-l-4 border-l-orange-500" : ""
+                }`}
                 style={{ minWidth: "40px" }}
               >
                 {count > 0 ? (

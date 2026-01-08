@@ -37,6 +37,12 @@ model User {
   createdSchedules  ScheduleEntry[] @relation("CreatedBy")
   modifiedSchedules ScheduleEntry[] @relation("ModifiedBy")
 
+  // Tech enrollments created by this user
+  techEnrollments   TechEnrollment[]
+
+  // Time punches edited by this user
+  editedPunches     TimePunch[]
+
   @@index([email])
   @@index([role])
 }
@@ -69,8 +75,29 @@ model Agent {
   // Schedule entries for this agent
   scheduleEntries ScheduleEntry[]
 
+  // In-office days tracking
+  inOfficeDays InOfficeDay[]
+
+  // Time clock enrollment
+  techEnrollment TechEnrollment?
+
   @@index([isActive])
   @@index([displayOrder])
+}
+
+// Track which days an agent is designated as "in office"
+model InOfficeDay {
+  id        String   @id @default(cuid())
+  agentId   String
+  date      DateTime @db.Date
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  agent     Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@unique([agentId, date])
+  @@index([agentId])
+  @@index([date])
 }
 
 model Skill {
@@ -237,4 +264,87 @@ model AuditLog {
   @@index([userId])
   @@index([entityType, entityId])
   @@index([timestamp])
+}
+
+// ============================================
+// TECH TIME CLOCK SYSTEM
+// ============================================
+
+enum PunchType {
+  CLOCK_IN
+  CLOCK_OUT
+}
+
+enum VerificationMethod {
+  FACE_VERIFIED   // Facial recognition succeeded
+  PIN_FALLBACK    // Used PIN after face verification failed
+}
+
+// Tech enrollment data - extends Agent with time clock capabilities
+model TechEnrollment {
+  id                String    @id @default(cuid())
+  agentId           String    @unique
+
+  // Authentication
+  pin               String    // Hashed PIN for fallback
+
+  // Reference photo for facial recognition
+  referencePhotoUrl String?   // Path to stored reference photo
+  faceDescriptor    Json?     // 128-dimension face descriptor array from face-api.js
+
+  // Initial enrollment location
+  enrollmentLat     Float?
+  enrollmentLng     Float?
+  enrollmentAddress String?   // Reverse geocoded address (optional)
+
+  enrolledAt        DateTime  @default(now())
+  enrolledById      String    // Admin/Supervisor who enrolled them
+  updatedAt         DateTime  @updatedAt
+
+  agent             Agent     @relation(fields: [agentId], references: [id], onDelete: Cascade)
+  enrolledBy        User      @relation(fields: [enrolledById], references: [id])
+  punches           TimePunch[]
+
+  @@index([agentId])
+}
+
+// Individual clock in/out records
+model TimePunch {
+  id                  String              @id @default(cuid())
+  enrollmentId        String
+
+  punchType           PunchType
+  punchTime           DateTime            @default(now())
+
+  // Verification details
+  verificationMethod  VerificationMethod
+  faceConfidence      Float?              // 0-1 confidence score if face was attempted
+
+  // Geolocation
+  latitude            Float?
+  longitude           Float?
+  accuracy            Float?              // GPS accuracy in meters
+  address             String?             // Reverse geocoded address (optional)
+
+  // Metadata
+  userAgent           String?             // Browser/device info
+  ipAddress           String?
+
+  // Manual entry fields
+  isManual            Boolean             @default(false)  // True if manually added by admin
+  manualNote          String?             // Reason for manual entry
+
+  // Edit tracking
+  editedAt            DateTime?           // When last edited
+  editedById          String?             // Who edited it
+  originalPunchTime   DateTime?           // Original time before edit
+
+  createdAt           DateTime            @default(now())
+
+  enrollment          TechEnrollment      @relation(fields: [enrollmentId], references: [id], onDelete: Cascade)
+  editedBy            User?               @relation(fields: [editedById], references: [id])
+
+  @@index([enrollmentId])
+  @@index([punchTime])
+  @@index([enrollmentId, punchTime])
 }

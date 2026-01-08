@@ -1,94 +1,82 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { mockActivityTypes, MockActivityType } from "@/lib/mock-data";
 import { ActivityTypeInput } from "@/types/activity";
 
-// In-memory store for mock data
-let activities = [...mockActivityTypes];
+// Activity type from database
+export type ActivityType = {
+  id: string;
+  name: string;
+  shortName: string;
+  description: string | null;
+  category: "WORK" | "BREAK" | "TRAINING" | "MEETING" | "PROJECT" | "TIME_OFF" | "CUSTOM";
+  color: string;
+  textColor: string;
+  isPaid: boolean;
+  countsAsWorking: boolean;
+  isActive: boolean;
+  isSystemType: boolean;
+  displayOrder: number;
+  createdAt: string;
+  updatedAt: string;
+};
 
-// Simulate API delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+// Fetch all activity types from API
+async function fetchActivities(category?: string): Promise<ActivityType[]> {
+  const params = new URLSearchParams();
+  if (category) params.set("category", category);
 
-// Fetch all activity types (mock)
-async function fetchActivities(category?: string): Promise<MockActivityType[]> {
-  await delay(300); // Simulate network delay
-
-  let result = activities.filter(a => a.isActive);
-  if (category) {
-    result = result.filter(a => a.category === category);
-  }
-  return result.sort((a, b) => a.displayOrder - b.displayOrder);
+  const response = await fetch(`/api/activities?${params}`);
+  if (!response.ok) throw new Error("Failed to fetch activities");
+  return response.json();
 }
 
-// Create a new activity type (mock)
-async function createActivity(data: ActivityTypeInput): Promise<MockActivityType> {
-  await delay(300);
+// Create a new activity type via API
+async function createActivity(data: ActivityTypeInput): Promise<ActivityType> {
+  const response = await fetch("/api/activities", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 
-  const existing = activities.find(a => a.name === data.name);
-  if (existing) {
-    throw new Error("An activity type with this name already exists");
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to create activity");
   }
 
-  const newActivity: MockActivityType = {
-    id: `act-${Date.now()}`,
-    ...data,
-    description: data.description || null,
-    isActive: true,
-    isSystemType: false,
-    displayOrder: activities.length + 1,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
-
-  activities.push(newActivity);
-  return newActivity;
+  return response.json();
 }
 
-// Update an activity type (mock)
+// Update an activity type via API
 async function updateActivity({
   id,
   data,
 }: {
   id: string;
   data: Partial<ActivityTypeInput>;
-}): Promise<MockActivityType> {
-  await delay(300);
+}): Promise<ActivityType> {
+  const response = await fetch(`/api/activities/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 
-  const index = activities.findIndex(a => a.id === id);
-  if (index === -1) {
-    throw new Error("Activity type not found");
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to update activity");
   }
 
-  if (data.name && data.name !== activities[index].name) {
-    const nameConflict = activities.find(a => a.name === data.name && a.id !== id);
-    if (nameConflict) {
-      throw new Error("An activity type with this name already exists");
-    }
-  }
-
-  activities[index] = {
-    ...activities[index],
-    ...data,
-    updatedAt: new Date(),
-  };
-
-  return activities[index];
+  return response.json();
 }
 
-// Delete an activity type (mock)
+// Delete an activity type via API
 async function deleteActivity(id: string): Promise<void> {
-  await delay(300);
+  const response = await fetch(`/api/activities/${id}`, {
+    method: "DELETE",
+  });
 
-  const index = activities.findIndex(a => a.id === id);
-  if (index === -1) {
-    throw new Error("Activity type not found");
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to delete activity");
   }
-
-  if (activities[index].isSystemType) {
-    throw new Error("Cannot delete system activity types");
-  }
-
-  // Soft delete
-  activities[index].isActive = false;
 }
 
 // Hook to fetch activity types
@@ -137,9 +125,9 @@ export function useDeleteActivity() {
 
 // Group activities by category
 export function groupActivitiesByCategory(
-  activities: MockActivityType[]
-): Record<string, MockActivityType[]> {
-  const grouped: Record<string, MockActivityType[]> = {
+  activities: ActivityType[]
+): Record<string, ActivityType[]> {
+  const grouped: Record<string, ActivityType[]> = {
     WORK: [],
     BREAK: [],
     TRAINING: [],

@@ -11,6 +11,10 @@ import {
   BarChart3,
   Settings,
   UserCog,
+  Clock,
+  ClipboardList,
+  FileText,
+  UserCheck,
 } from "lucide-react";
 
 const navigation = [
@@ -23,6 +27,12 @@ const navigation = [
 const adminNavigation = [
   { name: "Users", href: "/admin/users", icon: UserCog, roles: ["ADMIN"] },
   { name: "Settings", href: "/admin/settings", icon: Settings, roles: ["ADMIN"] },
+];
+
+const timeClockNavigation = [
+  { name: "Enrollments", href: "/admin/time-clock/enrollments", icon: UserCheck, roles: ["ADMIN", "SUPERVISOR"] },
+  { name: "Punches", href: "/admin/time-clock/punches", icon: ClipboardList, roles: ["ADMIN", "SUPERVISOR"] },
+  { name: "Reports", href: "/admin/time-clock/reports", icon: FileText, roles: ["ADMIN", "SUPERVISOR"] },
 ];
 
 export function Sidebar() {
@@ -63,6 +73,36 @@ export function Sidebar() {
             );
           })}
         </div>
+
+        {/* Time Clock Section */}
+        {(userRole === "ADMIN" || userRole === "SUPERVISOR") && (
+          <>
+            <div className="my-4 border-t border-gray-700" />
+            <div className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Time Clock
+            </div>
+            <div className="mt-2 space-y-1">
+              {filterByRole(timeClockNavigation).map((item) => {
+                const isActive = pathname === item.href;
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-gray-800 text-white"
+                        : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                    )}
+                  >
+                    <item.icon className="h-5 w-5 flex-shrink-0" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         {/* Admin Section */}
         {userRole === "ADMIN" && (

@@ -6,13 +6,16 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
-import { MockScheduleEntry, MockAgent, mockActivityTypes } from "@/lib/mock-data";
-import { getTimeSlotIndex } from "@/types/schedule";
+import { Agent } from "@/hooks/useAgents";
+import { ExtendedScheduleEntry } from "@/hooks/useSchedule";
+import { ActivityType } from "@/hooks/useActivities";
+import { getSlotSpan } from "@/types/schedule";
 import { Clock } from "lucide-react";
 
 interface AgentHoursSummaryProps {
-  agent: MockAgent;
-  entries: MockScheduleEntry[];
+  agent: Agent;
+  entries: ExtendedScheduleEntry[];
+  activities: ActivityType[];
   children: React.ReactNode;
 }
 
@@ -35,19 +38,19 @@ const categoryLabels: Record<string, string> = {
   CUSTOM: "Custom",
 };
 
-export function AgentHoursSummary({ agent, entries, children }: AgentHoursSummaryProps) {
+export function AgentHoursSummary({ agent, entries, activities, children }: AgentHoursSummaryProps) {
   const hoursSummary = useMemo(() => {
     // Calculate hours by category and activity
     const categoryMap: Record<string, CategoryHours> = {};
     let totalMinutes = 0;
 
     entries.forEach(entry => {
-      const activityType = mockActivityTypes.find(a => a.id === entry.activityTypeId);
+      const activityType = activities.find(a => a.id === entry.activityTypeId);
       if (!activityType) return;
 
-      const startIndex = getTimeSlotIndex(entry.startTime);
-      const endIndex = getTimeSlotIndex(entry.endTime);
-      const durationMinutes = (endIndex - startIndex) * 30;
+      // Use getSlotSpan which handles overnight shifts correctly
+      const slots = getSlotSpan(entry.startTime, entry.endTime);
+      const durationMinutes = slots * 30;
       totalMinutes += durationMinutes;
 
       const category = activityType.category;
@@ -101,7 +104,7 @@ export function AgentHoursSummary({ agent, entries, children }: AgentHoursSummar
       totalHours: Math.floor(totalMinutes / 60),
       totalMinutes: totalMinutes % 60,
     };
-  }, [entries]);
+  }, [entries, activities]);
 
   const formatTime = (hours: number, minutes: number) => {
     if (hours === 0 && minutes === 0) return "0h";

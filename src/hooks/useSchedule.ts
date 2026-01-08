@@ -1,92 +1,93 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { mockScheduleEntries, MockScheduleEntry, mockActivityTypes, mockAgents } from "@/lib/mock-data";
+import { useMemo } from "react";
 import { ScheduleEntryInput } from "@/types/schedule";
 
-// In-memory store for mock data
-let scheduleEntries = [...mockScheduleEntries];
+// Schedule entry type from database
+export type ScheduleEntry = {
+  id: string;
+  agentId: string;
+  activityTypeId: string;
+  date: string; // YYYY-MM-DD
+  startTime: string; // HH:MM
+  endTime: string; // HH:MM
+  notes: string | null;
+};
 
-// Simulate API delay
-const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Fetch schedule entries for a date
-async function fetchScheduleByDate(date: string): Promise<MockScheduleEntry[]> {
-  await delay(200);
-  return scheduleEntries.filter(entry => entry.date === date);
+// Fetch schedule entries for a date from API
+async function fetchScheduleByDate(date: string): Promise<ScheduleEntry[]> {
+  const params = new URLSearchParams({ startDate: date, endDate: date });
+  const response = await fetch(`/api/schedule?${params}`);
+  if (!response.ok) throw new Error("Failed to fetch schedule");
+  return response.json();
 }
 
-// Fetch schedule entries for an agent
-async function fetchScheduleByAgent(agentId: string, startDate: string, endDate: string): Promise<MockScheduleEntry[]> {
-  await delay(200);
-  return scheduleEntries.filter(
-    entry => entry.agentId === agentId && entry.date >= startDate && entry.date <= endDate
-  );
+// Fetch schedule entries for an agent from API
+async function fetchScheduleByAgent(agentId: string, startDate: string, endDate: string): Promise<ScheduleEntry[]> {
+  const params = new URLSearchParams({ startDate, endDate, agentId });
+  const response = await fetch(`/api/schedule?${params}`);
+  if (!response.ok) throw new Error("Failed to fetch schedule");
+  return response.json();
 }
 
-// Fetch schedule entries for a date range
-async function fetchScheduleByDateRange(startDate: string, endDate: string): Promise<MockScheduleEntry[]> {
-  await delay(200);
-  return scheduleEntries.filter(
-    entry => entry.date >= startDate && entry.date <= endDate
-  );
+// Fetch schedule entries for a date range from API
+async function fetchScheduleByDateRange(startDate: string, endDate: string): Promise<ScheduleEntry[]> {
+  const params = new URLSearchParams({ startDate, endDate });
+  const response = await fetch(`/api/schedule?${params}`);
+  if (!response.ok) throw new Error("Failed to fetch schedule");
+  return response.json();
 }
 
-// Create a new schedule entry
-async function createScheduleEntry(data: ScheduleEntryInput): Promise<MockScheduleEntry> {
-  await delay(200);
+// Create a new schedule entry via API
+async function createScheduleEntry(data: ScheduleEntryInput): Promise<ScheduleEntry> {
+  const response = await fetch("/api/schedule", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 
-  const newEntry: MockScheduleEntry = {
-    id: `sched-${Date.now()}`,
-    agentId: data.agentId,
-    activityTypeId: data.activityTypeId,
-    date: data.date,
-    startTime: data.startTime,
-    endTime: data.endTime,
-    notes: data.notes || null,
-    createdAt: new Date(),
-    updatedAt: new Date(),
-  };
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to create schedule entry");
+  }
 
-  scheduleEntries.push(newEntry);
-  return newEntry;
+  return response.json();
 }
 
-// Update a schedule entry
+// Update a schedule entry via API
 async function updateScheduleEntry({
   id,
   data,
 }: {
   id: string;
   data: Partial<ScheduleEntryInput>;
-}): Promise<MockScheduleEntry> {
-  await delay(200);
+}): Promise<ScheduleEntry> {
+  const response = await fetch(`/api/schedule/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
 
-  const index = scheduleEntries.findIndex(e => e.id === id);
-  if (index === -1) {
-    throw new Error("Schedule entry not found");
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to update schedule entry");
   }
 
-  scheduleEntries[index] = {
-    ...scheduleEntries[index],
-    ...data,
-    updatedAt: new Date(),
-  };
-
-  return scheduleEntries[index];
+  return response.json();
 }
 
-// Delete a schedule entry
+// Delete a schedule entry via API
 async function deleteScheduleEntry(id: string): Promise<void> {
-  await delay(200);
+  const response = await fetch(`/api/schedule/${id}`, {
+    method: "DELETE",
+  });
 
-  const index = scheduleEntries.findIndex(e => e.id === id);
-  if (index === -1) {
-    throw new Error("Schedule entry not found");
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to delete schedule entry");
   }
-
-  scheduleEntries.splice(index, 1);
 }
 
-// Move a schedule entry (drag-drop)
+// Move a schedule entry (drag-drop) via API
 async function moveScheduleEntry({
   id,
   agentId,
@@ -99,24 +100,19 @@ async function moveScheduleEntry({
   startTime: string;
   endTime: string;
   date?: string;
-}): Promise<MockScheduleEntry> {
-  await delay(100); // Fast for drag-drop
+}): Promise<ScheduleEntry> {
+  const response = await fetch(`/api/schedule/${id}`, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ agentId, startTime, endTime, date }),
+  });
 
-  const index = scheduleEntries.findIndex(e => e.id === id);
-  if (index === -1) {
-    throw new Error("Schedule entry not found");
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to move schedule entry");
   }
 
-  scheduleEntries[index] = {
-    ...scheduleEntries[index],
-    agentId,
-    startTime,
-    endTime,
-    date: date || scheduleEntries[index].date,
-    updatedAt: new Date(),
-  };
-
-  return scheduleEntries[index];
+  return response.json();
 }
 
 // Hook to fetch schedule by date
@@ -144,14 +140,79 @@ export function useScheduleByDateRange(startDate: string, endDate: string) {
   });
 }
 
+// Extended schedule entry with day offset for positioning
+export type ExtendedScheduleEntry = ScheduleEntry & {
+  _dayOffset: number; // 0 = current day, 1 = next day
+};
+
+// Helper to add days to a date string
+function addDaysToDate(dateStr: string, days: number): string {
+  const date = new Date(dateStr + "T00:00:00");
+  date.setDate(date.getDate() + days);
+  const year = date.getFullYear();
+  const month = (date.getMonth() + 1).toString().padStart(2, "0");
+  const day = date.getDate().toString().padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+// Hook to fetch schedule for extended 36-hour view (current day + next day morning)
+export function useScheduleExtended(baseDate: string) {
+  const nextDate = addDaysToDate(baseDate, 1);
+
+  // Fetch both days
+  const currentDayQuery = useQuery({
+    queryKey: ["schedule", "date", baseDate],
+    queryFn: () => fetchScheduleByDate(baseDate),
+  });
+
+  const nextDayQuery = useQuery({
+    queryKey: ["schedule", "date", nextDate],
+    queryFn: () => fetchScheduleByDate(nextDate),
+  });
+
+  const data = useMemo(() => {
+    if (!currentDayQuery.data || !nextDayQuery.data) return undefined;
+
+    // Current day entries
+    const currentDayEntries: ExtendedScheduleEntry[] = currentDayQuery.data.map(entry => ({
+      ...entry,
+      _dayOffset: 0,
+    }));
+
+    // Next day entries - only include morning (00:00-12:00 start times)
+    const nextDayMorningEntries: ExtendedScheduleEntry[] = nextDayQuery.data
+      .filter(entry => {
+        const hour = parseInt(entry.startTime.split(":")[0]);
+        return hour < 12;
+      })
+      .map(entry => ({
+        ...entry,
+        _dayOffset: 1,
+      }));
+
+    return {
+      entries: [...currentDayEntries, ...nextDayMorningEntries],
+      baseDate,
+      nextDate,
+    };
+  }, [currentDayQuery.data, nextDayQuery.data, baseDate, nextDate]);
+
+  return {
+    data,
+    isLoading: currentDayQuery.isLoading || nextDayQuery.isLoading,
+    isError: currentDayQuery.isError || nextDayQuery.isError,
+  };
+}
+
 // Hook to create schedule entry
 export function useCreateScheduleEntry() {
   const queryClient = useQueryClient();
 
   return useMutation({
     mutationFn: createScheduleEntry,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["schedule", "date", data.date] });
+    onSuccess: () => {
+      // Invalidate all schedule queries so both daily and weekly views update
+      queryClient.invalidateQueries({ queryKey: ["schedule"] });
     },
   });
 }
@@ -162,8 +223,9 @@ export function useUpdateScheduleEntry() {
 
   return useMutation({
     mutationFn: updateScheduleEntry,
-    onSuccess: (data) => {
-      queryClient.invalidateQueries({ queryKey: ["schedule", "date", data.date] });
+    onSuccess: () => {
+      // Invalidate all schedule queries so both daily and weekly views update
+      queryClient.invalidateQueries({ queryKey: ["schedule"] });
     },
   });
 }
@@ -207,12 +269,3 @@ export function useMoveScheduleEntry() {
   });
 }
 
-// Get activity type by ID (helper)
-export function getActivityType(activityTypeId: string) {
-  return mockActivityTypes.find(a => a.id === activityTypeId);
-}
-
-// Get agent by ID (helper)
-export function getAgent(agentId: string) {
-  return mockAgents.find(a => a.id === agentId);
-}

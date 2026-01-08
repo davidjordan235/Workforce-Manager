@@ -2,16 +2,25 @@
 
 import { useMemo } from "react";
 import { format, startOfWeek, addDays, isSameDay } from "date-fns";
-import { MockScheduleEntry, mockActivityTypes } from "@/lib/mock-data";
 import { useAgents } from "@/hooks/useAgents";
-import { useScheduleByDateRange } from "@/hooks/useSchedule";
-import { getTimeSlotIndex } from "@/types/schedule";
-import { Loader2 } from "lucide-react";
+import { useScheduleByDateRange, type ScheduleEntry } from "@/hooks/useSchedule";
+import { useActivities, type ActivityType } from "@/hooks/useActivities";
+import { useInOfficeDays, useToggleInOfficeDay, isInOffice } from "@/hooks/useInOfficeDays";
+import { useSettings } from "@/hooks/useSettings";
+import { getTimeSlotIndex, getSlotSpan, isOvernightShift } from "@/types/schedule";
+import { Loader2, Building2 } from "lucide-react";
 import {
   HoverCard,
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import {
+  ContextMenu,
+  ContextMenuTrigger,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuCheckboxItem,
+} from "@/components/ui/context-menu";
 
 interface WeeklyScheduleGridProps {
   date: Date;
@@ -30,10 +39,17 @@ export function WeeklyScheduleGrid({ date, onDayClick }: WeeklyScheduleGridProps
 
   const { data: scheduleEntries, isLoading: scheduleLoading } = useScheduleByDateRange(startDate, endDate);
   const { data: agents, isLoading: agentsLoading } = useAgents();
+  const { data: activities, isLoading: activitiesLoading } = useActivities();
+  const { data: inOfficeDays } = useInOfficeDays(startDate, endDate);
+  const toggleInOffice = useToggleInOfficeDay();
+  const { data: settings } = useSettings();
+
+  const inOfficeColor = settings?.inOfficeColor || "#9333ea";
+  const inOfficeTextColor = settings?.inOfficeTextColor || "#ffffff";
 
   // Group entries by agent and date
   const entriesByAgentAndDate = useMemo(() => {
-    const map: Record<string, Record<string, MockScheduleEntry[]>> = {};
+    const map: Record<string, Record<string, ScheduleEntry[]>> = {};
 
     agents?.forEach(agent => {
       map[agent.id] = {};
@@ -54,7 +70,7 @@ export function WeeklyScheduleGrid({ date, onDayClick }: WeeklyScheduleGridProps
     return map;
   }, [scheduleEntries, agents, weekDays]);
 
-  if (scheduleLoading || agentsLoading) {
+  if (scheduleLoading || agentsLoading || activitiesLoading) {
     return (
       <div className="flex items-center justify-center h-64">
         <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
@@ -117,14 +133,22 @@ export function WeeklyScheduleGrid({ date, onDayClick }: WeeklyScheduleGridProps
                   const dateStr = format(day, "yyyy-MM-dd");
                   const entries = entriesByAgentAndDate[agent.id]?.[dateStr] || [];
                   const isToday = isSameDay(day, new Date());
+                  const inOffice = isInOffice(inOfficeDays, agent.id, dateStr);
 
                   return (
                     <DayCell
                       key={dateStr}
                       entries={entries}
+                      activities={activities || []}
                       isToday={isToday}
+                      isInOffice={inOffice}
+                      inOfficeColor={inOfficeColor}
+                      inOfficeTextColor={inOfficeTextColor}
                       onClick={() => onDayClick(day)}
+                      onToggleInOffice={() => toggleInOffice.mutate({ agentId: agent.id, date: dateStr })}
+                      agentId={agent.id}
                       agentName={`${agent.firstName} ${agent.lastName}`}
+                      dateStr={dateStr}
                       dateLabel={format(day, "EEEE, MMMM d, yyyy")}
                     />
                   );
@@ -137,6 +161,7 @@ export function WeeklyScheduleGrid({ date, onDayClick }: WeeklyScheduleGridProps
           <WeeklyTotals
             weekDays={weekDays}
             entriesByDate={scheduleEntries || []}
+            activities={activities || []}
           />
         </div>
       </div>
@@ -144,17 +169,17 @@ export function WeeklyScheduleGrid({ date, onDayClick }: WeeklyScheduleGridProps
   );
 }
 
-// Helper to calculate activity breakdown
-function getActivityBreakdown(entries: MockScheduleEntry[]) {
-  const breakdown: Record<string, { activityType: typeof mockActivityTypes[0]; minutes: number }> = {};
+// Helper to calculate activity breakdown (handles overnight shifts)
+function getActivityBreakdown(entries: ScheduleEntry[], activities: ActivityType[]) {
+  const breakdown: Record<string, { activityType: ActivityType; minutes: number }> = {};
 
   entries.forEach(entry => {
-    const activityType = mockActivityTypes.find(a => a.id === entry.activityTypeId);
+    const activityType = activities.find(a => a.id === entry.activityTypeId);
     if (!activityType) return;
 
-    const start = getTimeSlotIndex(entry.startTime);
-    const end = getTimeSlotIndex(entry.endTime);
-    const minutes = (end - start) * 30;
+    // Use getSlotSpan which handles overnight shifts correctly
+    const slots = getSlotSpan(entry.startTime, entry.endTime);
+    const minutes = slots * 30;
 
     if (!breakdown[activityType.id]) {
       breakdown[activityType.id] = { activityType, minutes: 0 };
@@ -168,52 +193,115 @@ function getActivityBreakdown(entries: MockScheduleEntry[]) {
 }
 
 // Format time for display (e.g., "8a" or "5:30p")
-function formatTime(time: string) {
+// isEndTime: true if this is an end time
+// isOvernight: true if this end time is on the next day (shows "+1")
+function formatTime(time: string, isEndTime: boolean = false, isOvernight: boolean = false) {
   const [hours, minutes] = time.split(":");
   const h = parseInt(hours);
   const m = minutes;
+
+  // Handle midnight: when used as end time, display as "12a"
+  if (h === 0 && m === "00" && isEndTime) {
+    return "12a";
+  }
+
   const period = h >= 12 ? "p" : "a";
   const displayHour = h === 0 ? 12 : h > 12 ? h - 12 : h;
-  return m === "00" ? `${displayHour}${period}` : `${displayHour}:${m}${period}`;
+  const timeStr = m === "00" ? `${displayHour}${period}` : `${displayHour}:${m}${period}`;
+
+  // Add "+1" indicator for overnight end times
+  if (isOvernight && isEndTime) {
+    return `${timeStr}+1`;
+  }
+
+  return timeStr;
 }
 
 // Day cell showing shift start/end times with hover details
 function DayCell({
   entries,
+  activities,
   isToday,
+  isInOffice,
+  inOfficeColor,
+  inOfficeTextColor,
   onClick,
+  onToggleInOffice,
+  agentId,
   agentName,
+  dateStr,
   dateLabel,
 }: {
-  entries: MockScheduleEntry[];
+  entries: ScheduleEntry[];
+  activities: ActivityType[];
   isToday: boolean;
+  isInOffice: boolean;
+  inOfficeColor: string;
+  inOfficeTextColor: string;
   onClick: () => void;
+  onToggleInOffice: () => void;
+  agentId: string;
   agentName: string;
+  dateStr: string;
   dateLabel: string;
 }) {
-  // Calculate shift times (earliest start, latest end) and total hours
+  // Calculate shift times (earliest start, latest end), lunch times, and total hours
   const shiftInfo = useMemo(() => {
     if (entries.length === 0) return null;
 
-    // Sort by start time
-    const sorted = [...entries].sort((a, b) => a.startTime.localeCompare(b.startTime));
+    // Find earliest start time by comparing slot indices (not strings, since "00:00" < "23:00" alphabetically)
+    let shiftStart = entries[0].startTime;
+    let earliestStartIndex = getTimeSlotIndex(entries[0].startTime);
+    entries.forEach(entry => {
+      const entryStartIndex = getTimeSlotIndex(entry.startTime);
+      if (entryStartIndex < earliestStartIndex) {
+        shiftStart = entry.startTime;
+        earliestStartIndex = entryStartIndex;
+      }
+    });
 
-    // Find earliest start and latest end
-    const shiftStart = sorted[0].startTime;
-    const shiftEnd = sorted.reduce((latest, entry) =>
-      entry.endTime > latest ? entry.endTime : latest,
-      sorted[0].endTime
-    );
+    // Find latest end time by calculating absolute end position
+    // For overnight shifts, end position is 48 + endIndex (next day)
+    // For same-day shifts, end position is just endIndex (or 48 for midnight)
+    let shiftEnd = entries[0].endTime;
+    let shiftIsOvernight = isOvernightShift(entries[0].startTime, entries[0].endTime);
+    let latestAbsoluteEnd = shiftIsOvernight
+      ? 48 + getTimeSlotIndex(entries[0].endTime)
+      : getTimeSlotIndex(entries[0].endTime, true);
 
-    // Calculate total hours and working hours
+    entries.forEach(entry => {
+      const entryIsOvernight = isOvernightShift(entry.startTime, entry.endTime);
+      const entryAbsoluteEnd = entryIsOvernight
+        ? 48 + getTimeSlotIndex(entry.endTime)
+        : getTimeSlotIndex(entry.endTime, true);
+
+      if (entryAbsoluteEnd > latestAbsoluteEnd) {
+        shiftEnd = entry.endTime;
+        shiftIsOvernight = entryIsOvernight;
+        latestAbsoluteEnd = entryAbsoluteEnd;
+      }
+    });
+
+    // Find lunch entry (activity type with name "Lunch" or shortName "LCH" or category BREAK)
+    const lunchEntry = entries.find(entry => {
+      const activityType = activities.find(a => a.id === entry.activityTypeId);
+      return activityType?.name === "Lunch" ||
+             activityType?.shortName === "LCH" ||
+             (activityType?.category === "BREAK" && activityType?.name?.toLowerCase().includes("lunch"));
+    });
+
+    const lunchIsOvernight = lunchEntry
+      ? isOvernightShift(lunchEntry.startTime, lunchEntry.endTime)
+      : false;
+
+    // Calculate total hours and working hours using getSlotSpan (handles overnight)
     let totalMinutes = 0;
     let workingMinutes = 0;
 
     entries.forEach(entry => {
-      const activityType = mockActivityTypes.find(a => a.id === entry.activityTypeId);
-      const start = getTimeSlotIndex(entry.startTime);
-      const end = getTimeSlotIndex(entry.endTime);
-      const duration = (end - start) * 30;
+      const activityType = activities.find(a => a.id === entry.activityTypeId);
+      const slots = getSlotSpan(entry.startTime, entry.endTime);
+      const duration = slots * 30;
       totalMinutes += duration;
       if (activityType?.countsAsWorking) {
         workingMinutes += duration;
@@ -223,32 +311,62 @@ function DayCell({
     return {
       shiftStart,
       shiftEnd,
+      shiftIsOvernight,
+      lunchStart: lunchEntry?.startTime || null,
+      lunchEnd: lunchEntry?.endTime || null,
+      lunchIsOvernight,
       totalHours: totalMinutes / 60,
       workingHours: workingMinutes / 60,
     };
-  }, [entries]);
+  }, [entries, activities]);
 
-  const activityBreakdown = useMemo(() => getActivityBreakdown(entries), [entries]);
+  const activityBreakdown = useMemo(() => getActivityBreakdown(entries, activities), [entries, activities]);
+
+  // Determine background style based on in-office status
+  const getCellStyle = (): React.CSSProperties => {
+    if (isInOffice) {
+      // Use the configurable color with opacity for background
+      return {
+        backgroundColor: `${inOfficeColor}20`, // 20 is ~12% opacity in hex
+        minHeight: "80px",
+      };
+    }
+    return { minHeight: "80px" };
+  };
 
   const cellContent = (
     <div
       onClick={onClick}
-      className={`flex-1 min-w-[140px] border-r p-2 cursor-pointer hover:bg-blue-50 transition-colors ${
-        isToday ? "bg-blue-50/50" : ""
+      className={`flex-1 min-w-[140px] border-r p-2 cursor-pointer hover:bg-blue-50 transition-colors relative ${
+        isToday && !isInOffice ? "bg-blue-50/50" : ""
       }`}
-      style={{ minHeight: "60px" }}
+      style={getCellStyle()}
     >
+      {/* In-office indicator */}
+      {isInOffice && (
+        <div className="absolute top-1 right-1">
+          <Building2 className="h-4 w-4" style={{ color: inOfficeColor }} />
+        </div>
+      )}
+
       {shiftInfo ? (
-        <div className="flex flex-col items-center justify-center h-full gap-1">
+        <div className="flex flex-col items-center justify-center h-full gap-0.5">
           {/* Shift times */}
           <div className="text-sm font-semibold text-gray-800">
-            {formatTime(shiftInfo.shiftStart)} - {formatTime(shiftInfo.shiftEnd)}
+            {formatTime(shiftInfo.shiftStart)} - {formatTime(shiftInfo.shiftEnd, true, shiftInfo.shiftIsOvernight)}
           </div>
 
+          {/* Lunch times */}
+          {shiftInfo.lunchStart && shiftInfo.lunchEnd && (
+            <div className="text-xs text-orange-600">
+              Lunch: {formatTime(shiftInfo.lunchStart)} - {formatTime(shiftInfo.lunchEnd, true, shiftInfo.lunchIsOvernight)}
+            </div>
+          )}
+
           {/* Hours summary */}
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs mt-0.5">
             <span className="text-gray-500">
-              {shiftInfo.totalHours.toFixed(1)}h total
+              {shiftInfo.totalHours.toFixed(1)}h
             </span>
             <span className="text-green-600 font-medium">
               {shiftInfo.workingHours.toFixed(1)}h work
@@ -263,52 +381,100 @@ function DayCell({
     </div>
   );
 
+  // Wrap in context menu
+  const wrappedCell = (
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        {cellContent}
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuCheckboxItem
+          checked={isInOffice}
+          onCheckedChange={onToggleInOffice}
+        >
+          <Building2 className="h-4 w-4 mr-2" />
+          In Office
+        </ContextMenuCheckboxItem>
+      </ContextMenuContent>
+    </ContextMenu>
+  );
+
   if (!shiftInfo) {
-    return cellContent;
+    return wrappedCell;
   }
 
   return (
-    <HoverCard openDelay={200} closeDelay={100}>
-      <HoverCardTrigger asChild>
-        {cellContent}
-      </HoverCardTrigger>
-      <HoverCardContent className="w-64" side="bottom">
-        <div className="space-y-3">
-          <div>
-            <h4 className="text-sm font-semibold">{agentName}</h4>
-            <p className="text-xs text-muted-foreground">{dateLabel}</p>
-          </div>
+    <ContextMenu>
+      <ContextMenuTrigger asChild>
+        <div>
+          <HoverCard openDelay={200} closeDelay={100}>
+            <HoverCardTrigger asChild>
+              {cellContent}
+            </HoverCardTrigger>
+            <HoverCardContent className="w-64" side="bottom">
+              <div className="space-y-3">
+                <div>
+                  <h4 className="text-sm font-semibold">{agentName}</h4>
+                  <p className="text-xs text-muted-foreground">{dateLabel}</p>
+                  {isInOffice && (
+                    <p className="text-xs font-medium flex items-center gap-1 mt-1" style={{ color: inOfficeColor }}>
+                      <Building2 className="h-3 w-3" /> In Office
+                    </p>
+                  )}
+                </div>
 
-          <div className="flex items-center justify-between text-sm">
-            <span className="text-gray-600">Shift:</span>
-            <span className="font-medium">
-              {formatTime(shiftInfo.shiftStart)} - {formatTime(shiftInfo.shiftEnd)}
-            </span>
-          </div>
+                <div className="flex items-center justify-between text-sm">
+                  <span className="text-gray-600">Shift:</span>
+                  <span className="font-medium">
+                    {formatTime(shiftInfo.shiftStart)} - {formatTime(shiftInfo.shiftEnd, true, shiftInfo.shiftIsOvernight)}
+                    {shiftInfo.shiftIsOvernight && <span className="text-xs text-muted-foreground ml-1">(next day)</span>}
+                  </span>
+                </div>
 
-          <div className="space-y-1.5">
-            <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
-              Activity Breakdown
-            </h5>
-            {activityBreakdown.map(({ activityType, hours }) => (
-              <div key={activityType.id} className="flex items-center gap-2">
-                <div
-                  className="w-3 h-3 rounded-sm flex-shrink-0"
-                  style={{ backgroundColor: activityType.color }}
-                />
-                <span className="text-sm flex-1">{activityType.name}</span>
-                <span className="text-sm font-medium">{hours.toFixed(1)}h</span>
+                {shiftInfo.lunchStart && shiftInfo.lunchEnd && (
+                  <div className="flex items-center justify-between text-sm">
+                    <span className="text-gray-600">Lunch:</span>
+                    <span className="font-medium text-orange-600">
+                      {formatTime(shiftInfo.lunchStart)} - {formatTime(shiftInfo.lunchEnd, true, shiftInfo.lunchIsOvernight)}
+                    </span>
+                  </div>
+                )}
+
+                <div className="space-y-1.5">
+                  <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                    Activity Breakdown
+                  </h5>
+                  {activityBreakdown.map(({ activityType, hours }) => (
+                    <div key={activityType.id} className="flex items-center gap-2">
+                      <div
+                        className="w-3 h-3 rounded-sm flex-shrink-0"
+                        style={{ backgroundColor: activityType.color }}
+                      />
+                      <span className="text-sm flex-1">{activityType.name}</span>
+                      <span className="text-sm font-medium">{hours.toFixed(1)}h</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div className="pt-2 border-t flex justify-between text-sm">
+                  <span className="text-gray-600">Total:</span>
+                  <span className="font-bold">{shiftInfo.totalHours.toFixed(1)}h</span>
+                </div>
               </div>
-            ))}
-          </div>
-
-          <div className="pt-2 border-t flex justify-between text-sm">
-            <span className="text-gray-600">Total:</span>
-            <span className="font-bold">{shiftInfo.totalHours.toFixed(1)}h</span>
-          </div>
+            </HoverCardContent>
+          </HoverCard>
         </div>
-      </HoverCardContent>
-    </HoverCard>
+      </ContextMenuTrigger>
+      <ContextMenuContent>
+        <ContextMenuCheckboxItem
+          checked={isInOffice}
+          onCheckedChange={onToggleInOffice}
+        >
+          <Building2 className="h-4 w-4 mr-2" />
+          In Office
+        </ContextMenuCheckboxItem>
+      </ContextMenuContent>
+    </ContextMenu>
   );
 }
 
@@ -316,13 +482,15 @@ function DayCell({
 function WeeklyTotals({
   weekDays,
   entriesByDate,
+  activities,
 }: {
   weekDays: Date[];
-  entriesByDate: MockScheduleEntry[];
+  entriesByDate: ScheduleEntry[];
+  activities: ActivityType[];
 }) {
   // Group entries by date
   const entriesGroupedByDate = useMemo(() => {
-    const grouped: Record<string, MockScheduleEntry[]> = {};
+    const grouped: Record<string, ScheduleEntry[]> = {};
     weekDays.forEach(day => {
       grouped[format(day, "yyyy-MM-dd")] = [];
     });
@@ -345,10 +513,10 @@ function WeeklyTotals({
       const agentIds = new Set<string>();
 
       dayEntries.forEach(entry => {
-        const activityType = mockActivityTypes.find(a => a.id === entry.activityTypeId);
-        const start = getTimeSlotIndex(entry.startTime);
-        const end = getTimeSlotIndex(entry.endTime);
-        const hours = (end - start) * 30 / 60;
+        const activityType = activities.find(a => a.id === entry.activityTypeId);
+        // Use getSlotSpan which handles overnight shifts correctly
+        const slots = getSlotSpan(entry.startTime, entry.endTime);
+        const hours = slots * 30 / 60;
 
         totals[dateStr].total += hours;
         agentIds.add(entry.agentId);
@@ -361,7 +529,7 @@ function WeeklyTotals({
     });
 
     return totals;
-  }, [weekDays, entriesGroupedByDate]);
+  }, [weekDays, entriesGroupedByDate, activities]);
 
   return (
     <div className="sticky bottom-0 flex bg-gray-100 border-t-2 border-gray-300">
@@ -374,7 +542,7 @@ function WeeklyTotals({
         const { total, working, agentCount } = totalsByDate[dateStr] || { total: 0, working: 0, agentCount: 0 };
         const isToday = isSameDay(day, new Date());
         const dayEntries = entriesGroupedByDate[dateStr] || [];
-        const activityBreakdown = getActivityBreakdown(dayEntries);
+        const activityBreakdown = getActivityBreakdown(dayEntries, activities);
 
         const cellContent = (
           <div

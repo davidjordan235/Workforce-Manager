@@ -20,16 +20,16 @@ import {
   useCreateAgent,
   useUpdateAgent,
   useDeleteAgent,
+  Agent,
 } from "@/hooks/useAgents";
 import { AgentForm } from "@/components/features/agents/AgentForm";
 import { AgentCard } from "@/components/features/agents/AgentCard";
 import { AgentInput } from "@/types/agent";
-import { MockAgent } from "@/lib/mock-data";
 
 export default function AgentsPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingAgent, setEditingAgent] = useState<MockAgent | null>(null);
-  const [deletingAgent, setDeletingAgent] = useState<MockAgent | null>(null);
+  const [editingAgent, setEditingAgent] = useState<Agent | null>(null);
+  const [deletingAgent, setDeletingAgent] = useState<Agent | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
 
   const { data: agents, isLoading, error } = useAgents(searchQuery);
@@ -70,7 +70,7 @@ export default function AgentsPage() {
     }
   };
 
-  const handleEdit = (agent: MockAgent) => {
+  const handleEdit = (agent: Agent) => {
     setEditingAgent(agent);
     setIsFormOpen(true);
   };
