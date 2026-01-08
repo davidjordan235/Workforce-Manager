@@ -17,13 +17,39 @@ export async function GET(
 
     const agent = await prisma.agent.findUnique({
       where: { id },
+      include: {
+        department: true,
+        employmentType: true,
+        reportsTo: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+        techEnrollment: {
+          select: {
+            id: true,
+            referencePhotoUrl: true,
+            faceDescriptor: true,
+          },
+        },
+      },
     });
 
     if (!agent) {
       return NextResponse.json({ error: "Agent not found" }, { status: 404 });
     }
 
-    return NextResponse.json(agent);
+    // Transform to include hasFaceDescriptor flag
+    const result = {
+      ...agent,
+      techEnrollment: agent.techEnrollment
+        ? {
+            id: agent.techEnrollment.id,
+            referencePhotoUrl: agent.techEnrollment.referencePhotoUrl,
+            hasFaceDescriptor: !!agent.techEnrollment.faceDescriptor,
+          }
+        : null,
+    };
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Error fetching agent:", error);
     return NextResponse.json(
@@ -71,9 +97,26 @@ export async function PATCH(
     if (body.color !== undefined) updateData.color = body.color;
     if (body.displayOrder !== undefined) updateData.displayOrder = body.displayOrder;
 
+    // New fields
+    if (body.title !== undefined) updateData.title = body.title;
+    if (body.dateOfBirth !== undefined) {
+      updateData.dateOfBirth = body.dateOfBirth ? new Date(body.dateOfBirth) : null;
+    }
+    if (body.departmentId !== undefined) updateData.departmentId = body.departmentId || null;
+    if (body.employmentTypeId !== undefined) updateData.employmentTypeId = body.employmentTypeId || null;
+    if (body.reportsToId !== undefined) updateData.reportsToId = body.reportsToId || null;
+    if (body.emergencyContact !== undefined) updateData.emergencyContact = body.emergencyContact;
+
     const updatedAgent = await prisma.agent.update({
       where: { id },
       data: updateData,
+      include: {
+        department: true,
+        employmentType: true,
+        reportsTo: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+      },
     });
 
     return NextResponse.json(updatedAgent);

@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
-import { writeFile, mkdir } from "fs/promises";
+import { writeFile, mkdir, unlink } from "fs/promises";
 import path from "path";
 import { uploadPhotoSchema } from "@/types/time-clock";
 
@@ -115,6 +115,68 @@ export async function POST(
     console.error("Error uploading photo:", error);
     return NextResponse.json(
       { error: "Failed to upload photo" },
+      { status: 500 }
+    );
+  }
+}
+
+// DELETE /api/tech-enrollment/[id]/photo - Delete reference photo
+export async function DELETE(
+  request: NextRequest,
+  { params }: { params: Promise<{ id: string }> }
+) {
+  try {
+    const session = await auth();
+    if (!session) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    if (session.user.role !== "ADMIN" && session.user.role !== "SUPERVISOR") {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
+    }
+
+    const { id } = await params;
+
+    // Check if enrollment exists
+    const enrollment = await prisma.techEnrollment.findUnique({
+      where: { id },
+    });
+
+    if (!enrollment) {
+      return NextResponse.json(
+        { error: "Enrollment not found" },
+        { status: 404 }
+      );
+    }
+
+    // Delete the photo file if it exists
+    if (enrollment.referencePhotoUrl) {
+      const filepath = path.join(process.cwd(), "public", enrollment.referencePhotoUrl);
+      try {
+        await unlink(filepath);
+      } catch {
+        // File may not exist, continue anyway
+        console.warn("Could not delete photo file:", filepath);
+      }
+    }
+
+    // Update enrollment to remove photo URL and face descriptor
+    const updatedEnrollment = await prisma.techEnrollment.update({
+      where: { id },
+      data: {
+        referencePhotoUrl: null,
+        faceDescriptor: null,
+      },
+    });
+
+    return NextResponse.json({
+      id: updatedEnrollment.id,
+      message: "Photo deleted successfully",
+    });
+  } catch (error) {
+    console.error("Error deleting photo:", error);
+    return NextResponse.json(
+      { error: "Failed to delete photo" },
       { status: 500 }
     );
   }

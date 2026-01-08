@@ -48,6 +48,40 @@ model User {
 }
 
 // ============================================
+// DEPARTMENTS & EMPLOYMENT TYPES (User-manageable)
+// ============================================
+
+model Department {
+  id           String   @id @default(cuid())
+  name         String   @unique
+  description  String?
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  agents       Agent[]
+
+  @@index([isActive])
+  @@index([displayOrder])
+}
+
+model EmploymentType {
+  id           String   @id @default(cuid())
+  name         String   @unique  // e.g., "Full-time", "Part-time", "Contractor"
+  description  String?
+  isActive     Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  agents       Agent[]
+
+  @@index([isActive])
+  @@index([displayOrder])
+}
+
+// ============================================
 // AGENTS (Schedulable Employees)
 // ============================================
 
@@ -65,9 +99,25 @@ model Agent {
   createdAt    DateTime  @default(now())
   updatedAt    DateTime  @updatedAt
 
+  // Extended employee information
+  title            String?    // Job title
+  dateOfBirth      DateTime?  // Date of birth
+  emergencyContact Json?      // { name: string, phone: string, relationship: string }
+
+  // Organization relationships
+  departmentId     String?
+  employmentTypeId String?
+  reportsToId      String?    // Self-referential for manager
+
   // Optional link to user account
   userId       String?   @unique
   user         User?     @relation(fields: [userId], references: [id])
+
+  // Organization relations
+  department     Department?     @relation(fields: [departmentId], references: [id])
+  employmentType EmploymentType? @relation(fields: [employmentTypeId], references: [id])
+  reportsTo      Agent?          @relation("ReportsTo", fields: [reportsToId], references: [id])
+  directReports  Agent[]         @relation("ReportsTo")
 
   // Agent's skills/qualifications (for future queue assignment)
   skills       AgentSkill[]
@@ -83,6 +133,9 @@ model Agent {
 
   @@index([isActive])
   @@index([displayOrder])
+  @@index([departmentId])
+  @@index([employmentTypeId])
+  @@index([reportsToId])
 }
 
 // Track which days an agent is designated as "in office"

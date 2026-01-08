@@ -40,9 +40,35 @@ export async function GET(request: NextRequest) {
     const agents = await prisma.agent.findMany({
       where,
       orderBy: [{ displayOrder: "asc" }, { firstName: "asc" }],
+      include: {
+        department: true,
+        employmentType: true,
+        reportsTo: {
+          select: { id: true, firstName: true, lastName: true },
+        },
+        techEnrollment: {
+          select: {
+            id: true,
+            referencePhotoUrl: true,
+            faceDescriptor: true,
+          },
+        },
+      },
     });
 
-    return NextResponse.json(agents);
+    // Transform to include hasFaceDescriptor flag
+    const result = agents.map((agent) => ({
+      ...agent,
+      techEnrollment: agent.techEnrollment
+        ? {
+            id: agent.techEnrollment.id,
+            referencePhotoUrl: agent.techEnrollment.referencePhotoUrl,
+            hasFaceDescriptor: !!agent.techEnrollment.faceDescriptor,
+          }
+        : null,
+    }));
+
+    return NextResponse.json(result);
   } catch (error) {
     console.error("Error fetching agents:", error);
     return NextResponse.json(
@@ -65,7 +91,21 @@ export async function POST(request: NextRequest) {
     }
 
     const body = await request.json();
-    const { employeeId, firstName, lastName, email, phone, hireDate, color } = body;
+    const {
+      employeeId,
+      firstName,
+      lastName,
+      email,
+      phone,
+      hireDate,
+      color,
+      title,
+      dateOfBirth,
+      departmentId,
+      employmentTypeId,
+      reportsToId,
+      emergencyContact,
+    } = body;
 
     if (!employeeId || !firstName || !lastName || !email || !hireDate) {
       return NextResponse.json(
@@ -110,6 +150,19 @@ export async function POST(request: NextRequest) {
         hireDate: new Date(hireDate),
         color: color || null,
         displayOrder: (maxOrder._max.displayOrder ?? 0) + 1,
+        title: title || null,
+        dateOfBirth: dateOfBirth ? new Date(dateOfBirth) : null,
+        departmentId: departmentId || null,
+        employmentTypeId: employmentTypeId || null,
+        reportsToId: reportsToId || null,
+        emergencyContact: emergencyContact || null,
+      },
+      include: {
+        department: true,
+        employmentType: true,
+        reportsTo: {
+          select: { id: true, firstName: true, lastName: true },
+        },
       },
     });
 

@@ -100,6 +100,18 @@ async function uploadPhoto({
   return response.json();
 }
 
+// Delete photo
+async function deletePhoto(id: string): Promise<void> {
+  const response = await fetch(`/api/tech-enrollment/${id}/photo`, {
+    method: "DELETE",
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error || "Failed to delete photo");
+  }
+}
+
 // Hook to fetch all enrollments
 export function useTechEnrollments(search?: string) {
   return useQuery({
@@ -163,6 +175,20 @@ export function useUploadTechPhoto() {
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ["tech-enrollments"] });
       queryClient.invalidateQueries({ queryKey: ["tech-enrollment", data.id] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
+    },
+  });
+}
+
+// Hook to delete photo
+export function useDeleteTechPhoto() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: deletePhoto,
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["tech-enrollments"] });
+      queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
 }

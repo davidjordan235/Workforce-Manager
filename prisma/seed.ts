@@ -128,6 +128,44 @@ async function main() {
 
   console.log(`Created ${activityTypes.length} activity types`);
 
+  // Create default departments
+  const departments = [
+    { name: "Operations", description: "Operations and call center management", displayOrder: 1 },
+    { name: "Customer Service", description: "Customer support and service teams", displayOrder: 2 },
+    { name: "Sales", description: "Sales and business development", displayOrder: 3 },
+    { name: "IT", description: "Information technology and support", displayOrder: 4 },
+    { name: "HR", description: "Human resources and administration", displayOrder: 5 },
+  ];
+
+  for (const dept of departments) {
+    await prisma.department.upsert({
+      where: { name: dept.name },
+      update: dept,
+      create: dept,
+    });
+  }
+
+  console.log(`Created ${departments.length} departments`);
+
+  // Create default employment types
+  const employmentTypes = [
+    { name: "Full-time", description: "Full-time employee (40 hours/week)", displayOrder: 1 },
+    { name: "Part-time", description: "Part-time employee (less than 40 hours/week)", displayOrder: 2 },
+    { name: "Contractor", description: "Independent contractor or consultant", displayOrder: 3 },
+    { name: "Intern", description: "Internship position", displayOrder: 4 },
+    { name: "Temporary", description: "Temporary or seasonal employee", displayOrder: 5 },
+  ];
+
+  for (const empType of employmentTypes) {
+    await prisma.employmentType.upsert({
+      where: { name: empType.name },
+      update: empType,
+      create: empType,
+    });
+  }
+
+  console.log(`Created ${employmentTypes.length} employment types`);
+
   // Create default admin user
   const hashedPassword = await bcrypt.hash("admin123", 12);
 

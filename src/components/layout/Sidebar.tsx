@@ -15,13 +15,21 @@ import {
   ClipboardList,
   FileText,
   UserCheck,
+  Building2,
+  Briefcase,
+  ChevronDown,
+  ChevronRight,
 } from "lucide-react";
 
 const navigation = [
   { name: "Schedule", href: "/schedule", icon: Calendar, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
-  { name: "Agents", href: "/agents", icon: Users, roles: ["ADMIN", "SUPERVISOR"] },
   { name: "Activities", href: "/activities", icon: Palette, roles: ["ADMIN"] },
-  { name: "Staffing", href: "/staffing", icon: BarChart3, roles: ["ADMIN", "SUPERVISOR"] },
+];
+
+const staffingNavigation = [
+  { name: "Employees", href: "/staffing/employees", icon: Users, roles: ["ADMIN", "SUPERVISOR"] },
+  { name: "Departments", href: "/staffing/departments", icon: Building2, roles: ["ADMIN"] },
+  { name: "Employment Types", href: "/staffing/employment-types", icon: Briefcase, roles: ["ADMIN"] },
 ];
 
 const adminNavigation = [
@@ -73,6 +81,36 @@ export function Sidebar() {
             );
           })}
         </div>
+
+        {/* Staffing Section */}
+        {(userRole === "ADMIN" || userRole === "SUPERVISOR") && (
+          <>
+            <div className="my-4 border-t border-gray-700" />
+            <div className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Staffing
+            </div>
+            <div className="mt-2 space-y-1">
+              {filterByRole(staffingNavigation).map((item) => {
+                const isActive = pathname === item.href || pathname.startsWith(item.href + "/");
+                return (
+                  <Link
+                    key={item.name}
+                    href={item.href}
+                    className={cn(
+                      "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
+                      isActive
+                        ? "bg-gray-800 text-white"
+                        : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                    )}
+                  >
+                    <item.icon className="h-5 w-5 flex-shrink-0" />
+                    {item.name}
+                  </Link>
+                );
+              })}
+            </div>
+          </>
+        )}
 
         {/* Time Clock Section */}
         {(userRole === "ADMIN" || userRole === "SUPERVISOR") && (

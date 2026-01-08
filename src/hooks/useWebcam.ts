@@ -14,6 +14,7 @@ export interface UseWebcamReturn {
   isLoading: boolean;
   error: string | null;
   isActive: boolean;
+  isVideoReady: boolean;
   startCamera: () => Promise<void>;
   stopCamera: () => void;
   captureFrame: () => HTMLCanvasElement | null;
@@ -27,10 +28,12 @@ export function useWebcam(options: UseWebcamOptions = {}): UseWebcamReturn {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isActive, setIsActive] = useState(false);
+  const [isVideoReady, setIsVideoReady] = useState(false);
 
   const startCamera = useCallback(async () => {
     setIsLoading(true);
     setError(null);
+    setIsVideoReady(false);
 
     try {
       // Check for getUserMedia support
@@ -49,13 +52,6 @@ export function useWebcam(options: UseWebcamOptions = {}): UseWebcamReturn {
       });
 
       setStream(mediaStream);
-
-      // Attach stream to video element
-      if (videoRef.current) {
-        videoRef.current.srcObject = mediaStream;
-        await videoRef.current.play();
-      }
-
       setIsActive(true);
     } catch (err) {
       let message = "Failed to access camera";
@@ -90,6 +86,7 @@ export function useWebcam(options: UseWebcamOptions = {}): UseWebcamReturn {
     }
 
     setIsActive(false);
+    setIsVideoReady(false);
   }, [stream]);
 
   const captureFrame = useCallback((): HTMLCanvasElement | null => {
@@ -110,6 +107,49 @@ export function useWebcam(options: UseWebcamOptions = {}): UseWebcamReturn {
     return canvas;
   }, [isActive]);
 
+  // Attach stream to video element when both are available
+  useEffect(() => {
+    if (!stream || !isActive) return;
+
+    const attachStream = async () => {
+      // Wait a frame for the video element to be rendered
+      await new Promise((resolve) => requestAnimationFrame(resolve));
+
+      const video = videoRef.current;
+      if (!video) {
+        console.error("Video element not found");
+        return;
+      }
+
+      video.srcObject = stream;
+
+      try {
+        await video.play();
+
+        // Wait for video dimensions to be available
+        const waitForDimensions = () => {
+          return new Promise<void>((resolve) => {
+            const checkReady = () => {
+              if (video.videoWidth > 0 && video.videoHeight > 0) {
+                resolve();
+              } else {
+                requestAnimationFrame(checkReady);
+              }
+            };
+            checkReady();
+          });
+        };
+
+        await waitForDimensions();
+        setIsVideoReady(true);
+      } catch (err) {
+        console.error("Error playing video:", err);
+      }
+    };
+
+    attachStream();
+  }, [stream, isActive]);
+
   // Clean up on unmount
   useEffect(() => {
     return () => {
@@ -125,6 +165,7 @@ export function useWebcam(options: UseWebcamOptions = {}): UseWebcamReturn {
     isLoading,
     error,
     isActive,
+    isVideoReady,
     startCamera,
     stopCamera,
     captureFrame,
