@@ -54,6 +54,7 @@ export default function ReportsPage() {
     startDate,
     endDate,
     limit: 1000,
+    offset: 0,
   });
 
   // Calculate summaries from punches

@@ -1,5 +1,12 @@
 import { z } from "zod";
 
+// Emergency contact schema
+const emergencyContactSchema = z.object({
+  name: z.string().optional(),
+  phone: z.string().optional(),
+  relationship: z.string().optional(),
+}).optional().nullable();
+
 // Zod schema for creating/updating agents
 export const agentSchema = z.object({
   employeeId: z.string().min(1, "Employee ID is required").max(20),
@@ -9,6 +16,13 @@ export const agentSchema = z.object({
   phone: z.string().max(20).optional().nullable(),
   hireDate: z.string().or(z.date()),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid hex color").optional().nullable(),
+  title: z.string().max(100).optional().nullable(),
+  dateOfBirth: z.string().optional().nullable(),
+  departmentId: z.string().optional().nullable(),
+  employmentTypeId: z.string().optional().nullable(),
+  reportsToId: z.string().optional().nullable(),
+  isActive: z.boolean().optional(),
+  emergencyContact: emergencyContactSchema,
 });
 
 export type AgentInput = z.infer<typeof agentSchema>;

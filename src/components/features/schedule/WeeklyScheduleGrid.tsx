@@ -25,9 +25,10 @@ import {
 interface WeeklyScheduleGridProps {
   date: Date;
   onDayClick: (date: Date) => void;
+  departmentId?: string;
 }
 
-export function WeeklyScheduleGrid({ date, onDayClick }: WeeklyScheduleGridProps) {
+export function WeeklyScheduleGrid({ date, onDayClick, departmentId }: WeeklyScheduleGridProps) {
   const weekStart = startOfWeek(date, { weekStartsOn: 0 }); // Sunday
   const weekDays = useMemo(() =>
     Array.from({ length: 7 }, (_, i) => addDays(weekStart, i)),
@@ -37,8 +38,8 @@ export function WeeklyScheduleGrid({ date, onDayClick }: WeeklyScheduleGridProps
   const startDate = format(weekStart, "yyyy-MM-dd");
   const endDate = format(addDays(weekStart, 6), "yyyy-MM-dd");
 
-  const { data: scheduleEntries, isLoading: scheduleLoading } = useScheduleByDateRange(startDate, endDate);
-  const { data: agents, isLoading: agentsLoading } = useAgents();
+  const { data: allScheduleEntries, isLoading: scheduleLoading } = useScheduleByDateRange(startDate, endDate);
+  const { data: agents, isLoading: agentsLoading } = useAgents(undefined, departmentId);
   const { data: activities, isLoading: activitiesLoading } = useActivities();
   const { data: inOfficeDays } = useInOfficeDays(startDate, endDate);
   const toggleInOffice = useToggleInOfficeDay();
@@ -46,6 +47,15 @@ export function WeeklyScheduleGrid({ date, onDayClick }: WeeklyScheduleGridProps
 
   const inOfficeColor = settings?.inOfficeColor || "#9333ea";
   const inOfficeTextColor = settings?.inOfficeTextColor || "#ffffff";
+
+  // Get agent IDs for the current view (filtered by department if applicable)
+  const agentIds = useMemo(() => new Set(agents?.map(a => a.id) || []), [agents]);
+
+  // Filter schedule entries to only include those for displayed agents
+  const scheduleEntries = useMemo(() => {
+    if (!departmentId) return allScheduleEntries || []; // Show all if no department filter
+    return (allScheduleEntries || []).filter(entry => agentIds.has(entry.agentId));
+  }, [allScheduleEntries, agentIds, departmentId]);
 
   // Group entries by agent and date
   const entriesByAgentAndDate = useMemo(() => {

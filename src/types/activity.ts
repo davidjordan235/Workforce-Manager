@@ -8,9 +8,9 @@ export const activityTypeSchema = z.object({
   description: z.string().max(255).optional().nullable(),
   category: z.nativeEnum(ActivityCategory),
   color: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid hex color"),
-  textColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid hex color").default("#FFFFFF"),
-  isPaid: z.boolean().default(true),
-  countsAsWorking: z.boolean().default(true),
+  textColor: z.string().regex(/^#[0-9A-Fa-f]{6}$/, "Invalid hex color"),
+  isPaid: z.boolean(),
+  countsAsWorking: z.boolean(),
   displayOrder: z.number().int().min(0).optional(),
 });
 

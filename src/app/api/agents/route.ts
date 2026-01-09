@@ -13,9 +13,11 @@ export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const search = searchParams.get("search");
     const activeOnly = searchParams.get("active") !== "false";
+    const departmentId = searchParams.get("departmentId");
 
     const where: {
       isActive?: boolean;
+      departmentId?: string | null;
       OR?: Array<{
         firstName?: { contains: string; mode: "insensitive" };
         lastName?: { contains: string; mode: "insensitive" };
@@ -26,6 +28,10 @@ export async function GET(request: NextRequest) {
 
     if (activeOnly) {
       where.isActive = true;
+    }
+
+    if (departmentId) {
+      where.departmentId = departmentId;
     }
 
     if (search) {

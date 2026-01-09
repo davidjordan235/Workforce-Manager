@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { auth } from "@/lib/auth";
 import { writeFile, mkdir, unlink } from "fs/promises";
@@ -165,7 +166,7 @@ export async function DELETE(
       where: { id },
       data: {
         referencePhotoUrl: null,
-        faceDescriptor: null,
+        faceDescriptor: Prisma.DbNull,
       },
     });
 

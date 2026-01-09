@@ -186,7 +186,7 @@ export const listPunchesSchema = z.object({
   offset: z.coerce.number().min(0).optional().default(0),
 });
 
-export type ListPunchesInput = z.infer<typeof listPunchesSchema>;
+export type ListPunchesInput = z.input<typeof listPunchesSchema>;
 
 // Update punch time
 export const updatePunchSchema = z.object({

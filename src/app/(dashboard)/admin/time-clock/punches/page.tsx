@@ -95,6 +95,7 @@ export default function PunchesPage() {
     endDate,
     enrollmentId: employeeFilter !== "all" ? employeeFilter : undefined,
     limit: 500,
+    offset: 0,
   });
   const deleteMutation = useDeletePunch();
 

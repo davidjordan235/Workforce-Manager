@@ -1,6 +1,6 @@
 "use client";
 
-import { MockActivityType } from "@/lib/mock-data";
+import { ActivityType } from "@/hooks/useActivities";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -13,9 +13,9 @@ import { MoreVertical, Pencil, Trash2, Lock } from "lucide-react";
 import { categoryLabels } from "@/types/activity";
 
 interface ActivityTypeCardProps {
-  activity: MockActivityType;
-  onEdit: (activity: MockActivityType) => void;
-  onDelete: (activity: MockActivityType) => void;
+  activity: ActivityType;
+  onEdit: (activity: ActivityType) => void;
+  onDelete: (activity: ActivityType) => void;
 }
 
 export function ActivityTypeCard({

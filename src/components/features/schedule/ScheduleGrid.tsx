@@ -26,16 +26,17 @@ import { Loader2, Plus } from "lucide-react";
 
 interface ScheduleGridProps {
   date: Date;
+  departmentId?: string;
 }
 
-export function ScheduleGrid({ date }: ScheduleGridProps) {
+export function ScheduleGrid({ date, departmentId }: ScheduleGridProps) {
   const dateString = format(date, "yyyy-MM-dd");
   const nextDate = addDays(date, 1);
   const nextDateLabel = format(nextDate, "M/d");
   const timeSlots = useMemo(() => generateExtendedTimeSlots(), []);
 
   const { data: extendedData, isLoading: scheduleLoading } = useScheduleExtended(dateString);
-  const { data: agents, isLoading: agentsLoading } = useAgents();
+  const { data: agents, isLoading: agentsLoading } = useAgents(undefined, departmentId);
   const { data: activities, isLoading: activitiesLoading } = useActivities();
   const moveMutation = useMoveScheduleEntry();
   const createMutation = useCreateScheduleEntry();
@@ -59,7 +60,16 @@ export function ScheduleGrid({ date }: ScheduleGridProps) {
   );
 
   // Get schedule entries from extended data
-  const scheduleEntries = extendedData?.entries ?? [];
+  const allScheduleEntries = extendedData?.entries ?? [];
+
+  // Get agent IDs for the current view (filtered by department if applicable)
+  const agentIds = useMemo(() => new Set(agents?.map(a => a.id) || []), [agents]);
+
+  // Filter schedule entries to only include those for displayed agents
+  const scheduleEntries = useMemo(() => {
+    if (!departmentId) return allScheduleEntries; // Show all if no department filter
+    return allScheduleEntries.filter(entry => agentIds.has(entry.agentId));
+  }, [allScheduleEntries, agentIds, departmentId]);
 
   // Group schedule entries by agent
   const entriesByAgent = useMemo(() => {

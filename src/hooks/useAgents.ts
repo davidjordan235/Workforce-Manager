@@ -1,6 +1,39 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { AgentInput, getRandomAgentColor } from "@/types/agent";
 
+// Emergency contact type
+export type EmergencyContact = {
+  name?: string;
+  phone?: string;
+  relationship?: string;
+} | null;
+
+// Department type
+export type AgentDepartment = {
+  id: string;
+  name: string;
+} | null;
+
+// Employment type
+export type AgentEmploymentType = {
+  id: string;
+  name: string;
+} | null;
+
+// Reports to type
+export type AgentReportsTo = {
+  id: string;
+  firstName: string;
+  lastName: string;
+} | null;
+
+// Tech enrollment type
+export type AgentTechEnrollment = {
+  id: string;
+  referencePhotoUrl: string | null;
+  hasFaceDescriptor: boolean;
+} | null;
+
 // Agent type from database
 export type Agent = {
   id: string;
@@ -13,14 +46,25 @@ export type Agent = {
   isActive: boolean;
   displayOrder: number;
   color: string | null;
+  title: string | null;
+  dateOfBirth: string | null;
+  departmentId: string | null;
+  employmentTypeId: string | null;
+  reportsToId: string | null;
+  emergencyContact: EmergencyContact;
+  department: AgentDepartment;
+  employmentType: AgentEmploymentType;
+  reportsTo: AgentReportsTo;
+  techEnrollment: AgentTechEnrollment;
   createdAt: string;
   updatedAt: string;
 };
 
 // Fetch all agents from API
-async function fetchAgents(search?: string): Promise<Agent[]> {
+async function fetchAgents(search?: string, departmentId?: string): Promise<Agent[]> {
   const params = new URLSearchParams();
   if (search) params.set("search", search);
+  if (departmentId) params.set("departmentId", departmentId);
 
   const response = await fetch(`/api/agents?${params}`);
   if (!response.ok) {
@@ -106,10 +150,10 @@ async function reorderAgents(orderedIds: string[]): Promise<void> {
 }
 
 // Hook to fetch agents
-export function useAgents(search?: string) {
+export function useAgents(search?: string, departmentId?: string) {
   return useQuery({
-    queryKey: ["agents", search],
-    queryFn: () => fetchAgents(search),
+    queryKey: ["agents", search, departmentId],
+    queryFn: () => fetchAgents(search, departmentId),
   });
 }
 

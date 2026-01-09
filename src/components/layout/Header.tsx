@@ -15,13 +15,15 @@ import { LogOut, User } from "lucide-react";
 
 interface HeaderProps {
   title?: string;
+  description?: string;
 }
 
-export function Header({ title }: HeaderProps) {
+export function Header({ title, description }: HeaderProps) {
   return (
     <header className="sticky top-0 z-10 flex h-16 items-center justify-between border-b bg-white px-6 dark:bg-gray-950">
       <div>
         {title && <h1 className="text-xl font-semibold">{title}</h1>}
+        {description && <p className="text-sm text-muted-foreground">{description}</p>}
       </div>
 
       <div className="flex items-center gap-4">

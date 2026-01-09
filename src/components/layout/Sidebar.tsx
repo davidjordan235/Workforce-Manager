@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { mockUser } from "@/lib/mock-data";
+import { useDepartments } from "@/hooks/useDepartments";
 import {
   Calendar,
   Users,
@@ -19,12 +20,9 @@ import {
   Briefcase,
   ChevronDown,
   ChevronRight,
+  Loader2,
+  LogIn,
 } from "lucide-react";
-
-const navigation = [
-  { name: "Schedule", href: "/schedule", icon: Calendar, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
-  { name: "Activities", href: "/activities", icon: Palette, roles: ["ADMIN"] },
-];
 
 const staffingNavigation = [
   { name: "Employees", href: "/staffing/employees", icon: Users, roles: ["ADMIN", "SUPERVISOR"] },
@@ -34,10 +32,12 @@ const staffingNavigation = [
 
 const adminNavigation = [
   { name: "Users", href: "/admin/users", icon: UserCog, roles: ["ADMIN"] },
+  { name: "Activities", href: "/activities", icon: Palette, roles: ["ADMIN"] },
   { name: "Settings", href: "/admin/settings", icon: Settings, roles: ["ADMIN"] },
 ];
 
 const timeClockNavigation = [
+  { name: "Clock In/Out", href: "/tech", icon: LogIn, roles: ["ADMIN", "SUPERVISOR", "AGENT"] },
   { name: "Enrollments", href: "/admin/time-clock/enrollments", icon: UserCheck, roles: ["ADMIN", "SUPERVISOR"] },
   { name: "Punches", href: "/admin/time-clock/punches", icon: ClipboardList, roles: ["ADMIN", "SUPERVISOR"] },
   { name: "Reports", href: "/admin/time-clock/reports", icon: FileText, roles: ["ADMIN", "SUPERVISOR"] },
@@ -46,8 +46,12 @@ const timeClockNavigation = [
 export function Sidebar() {
   const pathname = usePathname();
   const userRole = mockUser.role;
+  const { data: departments, isLoading: departmentsLoading } = useDepartments();
 
-  const filterByRole = (items: typeof navigation) => {
+  // Filter departments to only show those with schedules enabled
+  const scheduleDepartments = departments?.filter((dept) => dept.hasSchedule) || [];
+
+  const filterByRole = <T extends { roles: string[] }>(items: T[]) => {
     return items.filter((item) => item.roles.includes(userRole || ""));
   };
 
@@ -60,27 +64,54 @@ export function Sidebar() {
       </div>
 
       {/* Navigation */}
-      <nav className="flex-1 space-y-1 px-3 py-4">
-        <div className="space-y-1">
-          {filterByRole(navigation).map((item) => {
-            const isActive = pathname.startsWith(item.href);
-            return (
+      <nav className="flex-1 space-y-1 px-3 py-4 overflow-y-auto">
+        {/* Schedules Section - only show if there are departments with schedules */}
+        {(scheduleDepartments.length > 0 || departmentsLoading) && (
+          <>
+            <div className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
+              Schedules
+            </div>
+            <div className="mt-2 space-y-1">
               <Link
-                key={item.name}
-                href={item.href}
+                href="/schedule"
                 className={cn(
                   "group flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive
+                  pathname === "/schedule"
                     ? "bg-gray-800 text-white"
                     : "text-gray-300 hover:bg-gray-800 hover:text-white"
                 )}
               >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                {item.name}
+                <Calendar className="h-5 w-5 flex-shrink-0" />
+                All Departments
               </Link>
-            );
-          })}
-        </div>
+              {departmentsLoading ? (
+                <div className="flex items-center gap-3 px-3 py-2 text-sm text-gray-400">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading...
+                </div>
+              ) : (
+                scheduleDepartments.map((dept) => {
+                  const isActive = pathname === `/schedule/department/${dept.id}`;
+                  return (
+                    <Link
+                      key={dept.id}
+                      href={`/schedule/department/${dept.id}`}
+                      className={cn(
+                        "group flex items-center gap-3 rounded-md px-3 py-2 pl-6 text-sm font-medium transition-colors",
+                        isActive
+                          ? "bg-gray-800 text-white"
+                          : "text-gray-300 hover:bg-gray-800 hover:text-white"
+                      )}
+                    >
+                      <Building2 className="h-4 w-4 flex-shrink-0" />
+                      {dept.name}
+                    </Link>
+                  );
+                })
+              )}
+            </div>
+          </>
+        )}
 
         {/* Staffing Section */}
         {(userRole === "ADMIN" || userRole === "SUPERVISOR") && (
@@ -113,7 +144,7 @@ export function Sidebar() {
         )}
 
         {/* Time Clock Section */}
-        {(userRole === "ADMIN" || userRole === "SUPERVISOR") && (
+        {(userRole === "ADMIN" || userRole === "SUPERVISOR" || userRole === "AGENT") && (
           <>
             <div className="my-4 border-t border-gray-700" />
             <div className="px-3 text-xs font-semibold uppercase tracking-wider text-gray-400">

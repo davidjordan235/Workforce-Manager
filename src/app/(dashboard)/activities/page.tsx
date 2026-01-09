@@ -21,16 +21,16 @@ import {
   useUpdateActivity,
   useDeleteActivity,
   groupActivitiesByCategory,
+  ActivityType,
 } from "@/hooks/useActivities";
 import { ActivityTypeForm } from "@/components/features/activities/ActivityTypeForm";
 import { ActivityTypeCard } from "@/components/features/activities/ActivityTypeCard";
 import { ActivityTypeInput, categoryLabels } from "@/types/activity";
-import { MockActivityType } from "@/lib/mock-data";
 
 export default function ActivitiesPage() {
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [editingActivity, setEditingActivity] = useState<MockActivityType | null>(null);
-  const [deletingActivity, setDeletingActivity] = useState<MockActivityType | null>(null);
+  const [editingActivity, setEditingActivity] = useState<ActivityType | null>(null);
+  const [deletingActivity, setDeletingActivity] = useState<ActivityType | null>(null);
   const [activeTab, setActiveTab] = useState<string>("all");
 
   const { data: activities, isLoading, error } = useActivities();
@@ -71,7 +71,7 @@ export default function ActivitiesPage() {
     }
   };
 
-  const handleEdit = (activity: MockActivityType) => {
+  const handleEdit = (activity: ActivityType) => {
     setEditingActivity(activity);
     setIsFormOpen(true);
   };

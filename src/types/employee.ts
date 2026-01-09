@@ -7,6 +7,7 @@ import { z } from "zod";
 export const departmentSchema = z.object({
   name: z.string().min(1, "Name is required").max(100),
   description: z.string().max(500).optional().nullable(),
+  hasSchedule: z.boolean().optional(),
   displayOrder: z.number().int().optional(),
 });
 
@@ -17,6 +18,7 @@ export interface DepartmentResponse {
   name: string;
   description: string | null;
   isActive: boolean;
+  hasSchedule: boolean;
   displayOrder: number;
   createdAt: string;
   updatedAt: string;

@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { HexColorPicker } from "react-colorful";
-import { MockActivityType } from "@/lib/mock-data";
+import { ActivityType } from "@/hooks/useActivities";
 import {
   Dialog,
   DialogContent,
@@ -27,7 +27,7 @@ import { activityTypeSchema, ActivityTypeInput, categoryLabels } from "@/types/a
 interface ActivityTypeFormProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  activityType?: MockActivityType | null;
+  activityType?: ActivityType | null;
   onSubmit: (data: ActivityTypeInput) => Promise<void>;
   isLoading?: boolean;
 }
@@ -153,7 +153,7 @@ export function ActivityTypeForm({
             <Select
               value={category}
               onValueChange={(value) =>
-                setValue("category", value as MockActivityType["category"])
+                setValue("category", value as ActivityType["category"])
               }
             >
               <SelectTrigger>

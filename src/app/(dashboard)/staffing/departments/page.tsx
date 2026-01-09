@@ -21,7 +21,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
-import { Plus, Building2, Loader2, MoreHorizontal, Pencil, Trash2 } from "lucide-react";
+import { Plus, Building2, Loader2, MoreHorizontal, Pencil, Trash2, Calendar } from "lucide-react";
+import { Switch } from "@/components/ui/switch";
 import { toast } from "sonner";
 import {
   useDepartments,
@@ -39,6 +40,7 @@ export default function DepartmentsPage() {
   const [formData, setFormData] = useState<DepartmentInput>({
     name: "",
     description: "",
+    hasSchedule: false,
   });
 
   const { data: departments, isLoading, error } = useDepartments(false);
@@ -47,7 +49,7 @@ export default function DepartmentsPage() {
   const deleteMutation = useDeleteDepartment();
 
   const resetForm = () => {
-    setFormData({ name: "", description: "" });
+    setFormData({ name: "", description: "", hasSchedule: false });
     setEditingDepartment(null);
   };
 
@@ -57,6 +59,7 @@ export default function DepartmentsPage() {
       setFormData({
         name: department.name,
         description: department.description || "",
+        hasSchedule: department.hasSchedule,
       });
     } else {
       resetForm();
@@ -155,6 +158,12 @@ export default function DepartmentsPage() {
                         <div>
                           <div className="flex items-center gap-2">
                             <span className="font-medium">{department.name}</span>
+                            {department.hasSchedule && (
+                              <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Schedule
+                              </span>
+                            )}
                             {!department.isActive && (
                               <span className="text-xs px-2 py-0.5 bg-muted rounded-full">
                                 Inactive
@@ -229,6 +238,21 @@ export default function DepartmentsPage() {
                   onChange={(e) => setFormData({ ...formData, description: e.target.value })}
                   placeholder="Brief description of this department"
                   rows={3}
+                />
+              </div>
+              <div className="flex items-center justify-between rounded-lg border p-4">
+                <div className="space-y-0.5">
+                  <Label htmlFor="hasSchedule" className="text-base">
+                    Enable Schedule
+                  </Label>
+                  <p className="text-sm text-muted-foreground">
+                    Display a schedule for this department in the navigation
+                  </p>
+                </div>
+                <Switch
+                  id="hasSchedule"
+                  checked={formData.hasSchedule || false}
+                  onCheckedChange={(checked) => setFormData({ ...formData, hasSchedule: checked })}
                 />
               </div>
             </div>
