@@ -15,6 +15,7 @@ import { format, addDays } from "date-fns";
 import { useScheduleExtended, useMoveScheduleEntry, useCreateScheduleEntry, useUpdateScheduleEntry, useDeleteScheduleEntry, ExtendedScheduleEntry, ScheduleEntry } from "@/hooks/useSchedule";
 import { useAgents } from "@/hooks/useAgents";
 import { useActivities, ActivityType } from "@/hooks/useActivities";
+import { useClockStatus } from "@/hooks/useClockStatus";
 import { generateExtendedTimeSlots, getTimeAndDateFromExtendedIndex, getSlotSpan, EXTENDED_SLOTS } from "@/types/schedule";
 import { TimeHeader } from "./TimeHeader";
 import { ScheduleRow } from "./ScheduleRow";
@@ -22,7 +23,8 @@ import { StaffingTotals } from "./StaffingTotals";
 import { ActivityPalette } from "./ActivityPalette";
 import { ScheduleEntryDialog } from "./ScheduleEntryDialog";
 import { Button } from "@/components/ui/button";
-import { Loader2, Plus } from "lucide-react";
+import { Toggle } from "@/components/ui/toggle";
+import { Loader2, Plus, CircleDot } from "lucide-react";
 
 interface ScheduleGridProps {
   date: Date;
@@ -38,6 +40,7 @@ export function ScheduleGrid({ date, departmentId }: ScheduleGridProps) {
   const { data: extendedData, isLoading: scheduleLoading } = useScheduleExtended(dateString);
   const { data: agents, isLoading: agentsLoading } = useAgents(undefined, departmentId);
   const { data: activities, isLoading: activitiesLoading } = useActivities();
+  const { data: clockStatus } = useClockStatus();
   const moveMutation = useMoveScheduleEntry();
   const createMutation = useCreateScheduleEntry();
   const updateMutation = useUpdateScheduleEntry();
@@ -49,6 +52,7 @@ export function ScheduleGrid({ date, departmentId }: ScheduleGridProps) {
   const [pasteTarget, setPasteTarget] = useState<{ agentId: string; slotIndex: number } | null>(null);
   const [clipboard, setClipboard] = useState<{ entry: ExtendedScheduleEntry; isCut: boolean } | null>(null);
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
+  const [showOnlyClockedIn, setShowOnlyClockedIn] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
 
   const sensors = useSensors(
@@ -64,6 +68,19 @@ export function ScheduleGrid({ date, departmentId }: ScheduleGridProps) {
 
   // Get agent IDs for the current view (filtered by department if applicable)
   const agentIds = useMemo(() => new Set(agents?.map(a => a.id) || []), [agents]);
+
+  // Filter agents by clock-in status if enabled
+  const filteredAgents = useMemo(() => {
+    if (!agents) return [];
+    if (!showOnlyClockedIn) return agents;
+    return agents.filter(agent => clockStatus?.[agent.id]?.isClockedIn);
+  }, [agents, showOnlyClockedIn, clockStatus]);
+
+  // Count of clocked-in employees
+  const clockedInCount = useMemo(() => {
+    if (!agents || !clockStatus) return 0;
+    return agents.filter(agent => clockStatus[agent.id]?.isClockedIn).length;
+  }, [agents, clockStatus]);
 
   // Filter schedule entries to only include those for displayed agents
   const scheduleEntries = useMemo(() => {
@@ -365,7 +382,7 @@ export function ScheduleGrid({ date, departmentId }: ScheduleGridProps) {
 
               {/* Agent Rows */}
               <div>
-                {agents?.map(agent => (
+                {filteredAgents.map(agent => (
                   <ScheduleRow
                     key={agent.id}
                     agent={agent}
@@ -377,6 +394,7 @@ export function ScheduleGrid({ date, departmentId }: ScheduleGridProps) {
                     selectedEntryId={selectedEntryId}
                     pasteTarget={pasteTarget?.agentId === agent.id ? pasteTarget : null}
                     hasClipboard={!!clipboard}
+                    isClockedIn={clockStatus?.[agent.id]?.isClockedIn}
                     onEntrySelect={handleEntrySelect}
                     onSlotClick={handleSlotClick}
                     onEntryMove={handleEntryMove}
@@ -409,6 +427,15 @@ export function ScheduleGrid({ date, departmentId }: ScheduleGridProps) {
             <Plus className="h-4 w-4 mr-2" />
             Add Entry
           </Button>
+          <Toggle
+            pressed={showOnlyClockedIn}
+            onPressedChange={setShowOnlyClockedIn}
+            className="w-full justify-start gap-2"
+            aria-label="Show only clocked in"
+          >
+            <CircleDot className={`h-4 w-4 ${showOnlyClockedIn ? "text-green-500" : ""}`} />
+            <span className="text-sm">Clocked In ({clockedInCount})</span>
+          </Toggle>
           <ActivityPalette activities={activities || []} />
         </div>
       </div>

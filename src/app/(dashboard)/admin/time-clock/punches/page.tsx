@@ -63,7 +63,7 @@ import { AdminTimePunchResponse, PunchType, VerificationMethod } from "@/types/t
 import { formatTime, formatHoursDecimal } from "@/lib/hours-calculator";
 import { getGoogleMapsLink } from "@/lib/geolocation";
 
-type SortField = "employee" | "date" | "time" | "type" | "verification";
+type SortField = "employee" | "date";
 type SortDirection = "asc" | "desc";
 
 // Interface for punch with missing pair info
@@ -188,14 +188,7 @@ export default function PunchesPage() {
           );
           break;
         case "date":
-        case "time":
           comparison = new Date(a.punchTime).getTime() - new Date(b.punchTime).getTime();
-          break;
-        case "type":
-          comparison = a.punchType.localeCompare(b.punchType);
-          break;
-        case "verification":
-          comparison = a.verificationMethod.localeCompare(b.verificationMethod);
           break;
       }
 
@@ -404,33 +397,9 @@ export default function PunchesPage() {
                       <SortIcon field="date" />
                     </div>
                   </TableHead>
-                  <TableHead
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort("time")}
-                  >
-                    <div className="flex items-center">
-                      Time
-                      <SortIcon field="time" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort("type")}
-                  >
-                    <div className="flex items-center">
-                      Type
-                      <SortIcon field="type" />
-                    </div>
-                  </TableHead>
-                  <TableHead
-                    className="cursor-pointer hover:bg-muted/50"
-                    onClick={() => handleSort("verification")}
-                  >
-                    <div className="flex items-center">
-                      Verification
-                      <SortIcon field="verification" />
-                    </div>
-                  </TableHead>
+                  <TableHead>Time</TableHead>
+                  <TableHead>Type</TableHead>
+                  <TableHead>Verification</TableHead>
                   <TableHead>Location</TableHead>
                   <TableHead>Notes</TableHead>
                   <TableHead className="w-[50px]"></TableHead>

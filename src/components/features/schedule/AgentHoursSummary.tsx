@@ -17,6 +17,7 @@ interface AgentHoursSummaryProps {
   entries: ExtendedScheduleEntry[];
   activities: ActivityType[];
   children: React.ReactNode;
+  isClockedIn?: boolean;
 }
 
 interface CategoryHours {
@@ -38,7 +39,7 @@ const categoryLabels: Record<string, string> = {
   CUSTOM: "Custom",
 };
 
-export function AgentHoursSummary({ agent, entries, activities, children }: AgentHoursSummaryProps) {
+export function AgentHoursSummary({ agent, entries, activities, children, isClockedIn }: AgentHoursSummaryProps) {
   const hoursSummary = useMemo(() => {
     // Calculate hours by category and activity
     const categoryMap: Record<string, CategoryHours> = {};
@@ -126,11 +127,22 @@ export function AgentHoursSummary({ agent, entries, activities, children }: Agen
             >
               {agent.firstName[0]}{agent.lastName[0]}
             </div>
-            <div>
+            <div className="flex-1">
               <h4 className="text-sm font-semibold">
                 {agent.firstName} {agent.lastName}
               </h4>
               <p className="text-xs text-muted-foreground">Daily Schedule Summary</p>
+            </div>
+            {/* Clock Status */}
+            <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
+              isClockedIn
+                ? "bg-green-100 text-green-700"
+                : "bg-gray-100 text-gray-600"
+            }`}>
+              <div className={`w-2 h-2 rounded-full ${
+                isClockedIn ? "bg-green-500" : "bg-gray-400"
+              }`} />
+              {isClockedIn ? "Clocked In" : "Clocked Out"}
             </div>
           </div>
 

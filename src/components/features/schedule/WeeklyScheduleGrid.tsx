@@ -1,14 +1,16 @@
 "use client";
 
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { format, startOfWeek, addDays, isSameDay } from "date-fns";
 import { useAgents } from "@/hooks/useAgents";
 import { useScheduleByDateRange, type ScheduleEntry } from "@/hooks/useSchedule";
 import { useActivities, type ActivityType } from "@/hooks/useActivities";
 import { useInOfficeDays, useToggleInOfficeDay, isInOffice } from "@/hooks/useInOfficeDays";
 import { useSettings } from "@/hooks/useSettings";
+import { useClockStatus } from "@/hooks/useClockStatus";
 import { getTimeSlotIndex, getSlotSpan, isOvernightShift } from "@/types/schedule";
-import { Loader2, Building2 } from "lucide-react";
+import { Loader2, Building2, CircleDot } from "lucide-react";
+import { Toggle } from "@/components/ui/toggle";
 import {
   HoverCard,
   HoverCardContent,
@@ -44,12 +46,28 @@ export function WeeklyScheduleGrid({ date, onDayClick, departmentId }: WeeklySch
   const { data: inOfficeDays } = useInOfficeDays(startDate, endDate);
   const toggleInOffice = useToggleInOfficeDay();
   const { data: settings } = useSettings();
+  const { data: clockStatus } = useClockStatus();
 
   const inOfficeColor = settings?.inOfficeColor || "#9333ea";
   const inOfficeTextColor = settings?.inOfficeTextColor || "#ffffff";
 
+  const [showOnlyClockedIn, setShowOnlyClockedIn] = useState(false);
+
   // Get agent IDs for the current view (filtered by department if applicable)
   const agentIds = useMemo(() => new Set(agents?.map(a => a.id) || []), [agents]);
+
+  // Filter agents by clock-in status if enabled
+  const filteredAgents = useMemo(() => {
+    if (!agents) return [];
+    if (!showOnlyClockedIn) return agents;
+    return agents.filter(agent => clockStatus?.[agent.id]?.isClockedIn);
+  }, [agents, showOnlyClockedIn, clockStatus]);
+
+  // Count of clocked-in employees
+  const clockedInCount = useMemo(() => {
+    if (!agents || !clockStatus) return 0;
+    return agents.filter(agent => clockStatus[agent.id]?.isClockedIn).length;
+  }, [agents, clockStatus]);
 
   // Filter schedule entries to only include those for displayed agents
   const scheduleEntries = useMemo(() => {
@@ -94,8 +112,18 @@ export function WeeklyScheduleGrid({ date, onDayClick, departmentId }: WeeklySch
         <div className="min-w-max">
           {/* Week Header */}
           <div className="sticky top-0 z-20 flex bg-gray-100 border-b">
-            <div className="sticky left-0 z-30 w-48 flex-shrink-0 bg-gray-100 border-r p-2 font-semibold text-sm">
-              Agent
+            <div className="sticky left-0 z-30 w-48 flex-shrink-0 bg-gray-100 border-r p-2 font-semibold text-sm flex items-center justify-between">
+              <span>Agent</span>
+              <Toggle
+                pressed={showOnlyClockedIn}
+                onPressedChange={setShowOnlyClockedIn}
+                size="sm"
+                className="h-6 px-2 gap-1"
+                aria-label="Show only clocked in"
+              >
+                <CircleDot className={`h-3 w-3 ${showOnlyClockedIn ? "text-green-500" : ""}`} />
+                <span className="text-xs">{clockedInCount}</span>
+              </Toggle>
             </div>
             {weekDays.map(day => {
               const isToday = isSameDay(day, new Date());
@@ -103,7 +131,7 @@ export function WeeklyScheduleGrid({ date, onDayClick, departmentId }: WeeklySch
                 <div
                   key={day.toISOString()}
                   onClick={() => onDayClick(day)}
-                  className={`flex-1 min-w-[140px] border-r p-2 text-center cursor-pointer hover:bg-gray-200 transition-colors ${
+                  className={`w-[140px] flex-shrink-0 border-r p-2 text-center cursor-pointer hover:bg-gray-200 transition-colors ${
                     isToday ? "bg-blue-50" : ""
                   }`}
                 >
@@ -119,24 +147,69 @@ export function WeeklyScheduleGrid({ date, onDayClick, departmentId }: WeeklySch
                 </div>
               );
             })}
+            {/* Weekly Total Header */}
+            <div className="w-[160px] flex-shrink-0 bg-gray-200 border-r p-2 text-center">
+              <div className="text-xs text-gray-500 uppercase">Weekly</div>
+              <div className="text-lg font-semibold">Total</div>
+            </div>
           </div>
 
           {/* Agent Rows */}
           <div>
-            {agents?.map(agent => (
+            {filteredAgents.map(agent => {
+              const isClockedIn = clockStatus?.[agent.id]?.isClockedIn;
+              return (
               <div key={agent.id} className="flex border-b hover:bg-gray-50/50">
                 {/* Agent info (sticky) */}
-                <div className="sticky left-0 z-10 w-48 flex-shrink-0 bg-white border-r p-2 flex items-center gap-2">
-                  <div
-                    className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
-                    style={{ backgroundColor: agent.color || "#4CAF50" }}
-                  >
-                    {agent.firstName[0]}{agent.lastName[0]}
-                  </div>
-                  <span className="truncate text-sm font-medium">
-                    {agent.firstName} {agent.lastName}
-                  </span>
-                </div>
+                <HoverCard openDelay={200} closeDelay={100}>
+                  <HoverCardTrigger asChild>
+                    <div className="sticky left-0 z-10 w-48 flex-shrink-0 bg-white border-r p-2 flex items-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors">
+                      {/* Clock-in status indicator - reserve space even when not clocked in */}
+                      <div className="w-2.5 h-2.5 flex-shrink-0 flex items-center justify-center">
+                        {isClockedIn && (
+                          <div
+                            className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"
+                            title="Currently clocked in"
+                          />
+                        )}
+                      </div>
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
+                        style={{ backgroundColor: agent.color || "#4CAF50" }}
+                      >
+                        {agent.firstName[0]}{agent.lastName[0]}
+                      </div>
+                      <span className="truncate text-sm font-medium">
+                        {agent.firstName} {agent.lastName}
+                      </span>
+                    </div>
+                  </HoverCardTrigger>
+                  <HoverCardContent className="w-56" side="right" align="start">
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold"
+                        style={{ backgroundColor: agent.color || "#4CAF50" }}
+                      >
+                        {agent.firstName[0]}{agent.lastName[0]}
+                      </div>
+                      <div className="flex-1">
+                        <h4 className="text-sm font-semibold">
+                          {agent.firstName} {agent.lastName}
+                        </h4>
+                      </div>
+                      <div className={`flex items-center gap-1.5 px-2 py-1 rounded-full text-xs font-medium ${
+                        isClockedIn
+                          ? "bg-green-100 text-green-700"
+                          : "bg-gray-100 text-gray-600"
+                      }`}>
+                        <div className={`w-2 h-2 rounded-full ${
+                          isClockedIn ? "bg-green-500" : "bg-gray-400"
+                        }`} />
+                        {isClockedIn ? "Clocked In" : "Clocked Out"}
+                      </div>
+                    </div>
+                  </HoverCardContent>
+                </HoverCard>
 
                 {/* Day cells */}
                 {weekDays.map(day => {
@@ -163,8 +236,16 @@ export function WeeklyScheduleGrid({ date, onDayClick, departmentId }: WeeklySch
                     />
                   );
                 })}
+
+                {/* Agent Weekly Total */}
+                <AgentWeeklyTotal
+                  agentId={agent.id}
+                  entriesByDate={entriesByAgentAndDate[agent.id] || {}}
+                  activities={activities || []}
+                />
               </div>
-            ))}
+              );
+            })}
           </div>
 
           {/* Weekly Totals Footer */}
@@ -225,6 +306,127 @@ function formatTime(time: string, isEndTime: boolean = false, isOvernight: boole
   }
 
   return timeStr;
+}
+
+// Agent weekly totals cell
+function AgentWeeklyTotal({
+  agentId,
+  entriesByDate,
+  activities,
+}: {
+  agentId: string;
+  entriesByDate: Record<string, ScheduleEntry[]>;
+  activities: ActivityType[];
+}) {
+  const weeklyBreakdown = useMemo(() => {
+    const breakdown: Record<string, { activityType: ActivityType; minutes: number }> = {};
+    let totalMinutes = 0;
+    let workingMinutes = 0;
+
+    Object.values(entriesByDate).forEach(dayEntries => {
+      dayEntries.forEach(entry => {
+        const activityType = activities.find(a => a.id === entry.activityTypeId);
+        if (!activityType) return;
+
+        const slots = getSlotSpan(entry.startTime, entry.endTime);
+        const minutes = slots * 30;
+        totalMinutes += minutes;
+
+        if (activityType.countsAsWorking) {
+          workingMinutes += minutes;
+        }
+
+        if (!breakdown[activityType.id]) {
+          breakdown[activityType.id] = { activityType, minutes: 0 };
+        }
+        breakdown[activityType.id].minutes += minutes;
+      });
+    });
+
+    const activities_sorted = Object.values(breakdown)
+      .map(b => ({ ...b, hours: b.minutes / 60 }))
+      .sort((a, b) => b.minutes - a.minutes);
+
+    return {
+      activities: activities_sorted,
+      totalHours: totalMinutes / 60,
+      workingHours: workingMinutes / 60,
+    };
+  }, [entriesByDate, activities]);
+
+  return (
+    <HoverCard openDelay={200} closeDelay={100}>
+      <HoverCardTrigger asChild>
+        <div
+          className="w-[160px] flex-shrink-0 bg-gray-50 border-r p-2 cursor-default hover:bg-gray-100 transition-colors"
+          style={{ minHeight: "80px" }}
+        >
+          {weeklyBreakdown.totalHours > 0 ? (
+            <div className="flex flex-col items-center justify-center h-full gap-1">
+              <div className="text-sm font-bold text-gray-800">
+                {weeklyBreakdown.totalHours.toFixed(1)}h
+              </div>
+              <div className="text-xs text-green-600 font-medium">
+                {weeklyBreakdown.workingHours.toFixed(1)}h work
+              </div>
+              {/* Show top 2 activities */}
+              <div className="flex flex-wrap gap-1 justify-center mt-1">
+                {weeklyBreakdown.activities.slice(0, 2).map(({ activityType, hours }) => (
+                  <div
+                    key={activityType.id}
+                    className="flex items-center gap-0.5 text-[10px] text-gray-600"
+                  >
+                    <div
+                      className="w-2 h-2 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: activityType.color }}
+                    />
+                    <span>{hours.toFixed(1)}h</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <div className="h-full flex items-center justify-center text-xs text-gray-400">
+              -
+            </div>
+          )}
+        </div>
+      </HoverCardTrigger>
+      {weeklyBreakdown.totalHours > 0 && (
+        <HoverCardContent className="w-64" side="left">
+          <div className="space-y-3">
+            <div>
+              <h4 className="text-sm font-semibold">Weekly Activity Breakdown</h4>
+            </div>
+
+            <div className="space-y-1.5">
+              {weeklyBreakdown.activities.map(({ activityType, hours }) => (
+                <div key={activityType.id} className="flex items-center gap-2">
+                  <div
+                    className="w-3 h-3 rounded-sm flex-shrink-0"
+                    style={{ backgroundColor: activityType.color }}
+                  />
+                  <span className="text-sm flex-1">{activityType.name}</span>
+                  <span className="text-sm font-medium">{hours.toFixed(1)}h</span>
+                </div>
+              ))}
+            </div>
+
+            <div className="pt-2 border-t space-y-1">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Total Hours:</span>
+                <span className="font-bold">{weeklyBreakdown.totalHours.toFixed(1)}h</span>
+              </div>
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">Working Hours:</span>
+                <span className="font-bold text-green-600">{weeklyBreakdown.workingHours.toFixed(1)}h</span>
+              </div>
+            </div>
+          </div>
+        </HoverCardContent>
+      )}
+    </HoverCard>
+  );
 }
 
 // Day cell showing shift start/end times with hover details
@@ -347,7 +549,7 @@ function DayCell({
   const cellContent = (
     <div
       onClick={onClick}
-      className={`flex-1 min-w-[140px] border-r p-2 cursor-pointer hover:bg-blue-50 transition-colors relative ${
+      className={`w-[140px] flex-shrink-0 border-r p-2 cursor-pointer hover:bg-blue-50 transition-colors relative ${
         isToday && !isInOffice ? "bg-blue-50/50" : ""
       }`}
       style={getCellStyle()}
@@ -541,6 +743,37 @@ function WeeklyTotals({
     return totals;
   }, [weekDays, entriesGroupedByDate, activities]);
 
+  // Calculate grand totals for the week
+  const grandTotals = useMemo(() => {
+    let total = 0;
+    let working = 0;
+    const breakdown: Record<string, { activityType: ActivityType; minutes: number }> = {};
+
+    entriesByDate.forEach(entry => {
+      const activityType = activities.find(a => a.id === entry.activityTypeId);
+      if (!activityType) return;
+
+      const slots = getSlotSpan(entry.startTime, entry.endTime);
+      const hours = slots * 30 / 60;
+      total += hours;
+
+      if (activityType.countsAsWorking) {
+        working += hours;
+      }
+
+      if (!breakdown[activityType.id]) {
+        breakdown[activityType.id] = { activityType, minutes: 0 };
+      }
+      breakdown[activityType.id].minutes += slots * 30;
+    });
+
+    const activities_sorted = Object.values(breakdown)
+      .map(b => ({ ...b, hours: b.minutes / 60 }))
+      .sort((a, b) => b.minutes - a.minutes);
+
+    return { total, working, activities: activities_sorted };
+  }, [entriesByDate, activities]);
+
   return (
     <div className="sticky bottom-0 flex bg-gray-100 border-t-2 border-gray-300">
       <div className="sticky left-0 z-30 w-48 flex-shrink-0 bg-gray-100 border-r p-2 flex flex-col justify-center" style={{ minHeight: "60px" }}>
@@ -557,7 +790,7 @@ function WeeklyTotals({
         const cellContent = (
           <div
             key={dateStr}
-            className={`flex-1 min-w-[140px] border-r p-2 text-center cursor-default hover:bg-gray-200 transition-colors flex flex-col items-center justify-center ${
+            className={`w-[140px] flex-shrink-0 border-r p-2 text-center cursor-default hover:bg-gray-200 transition-colors flex flex-col items-center justify-center ${
               isToday ? "bg-blue-50" : ""
             }`}
             style={{ minHeight: "60px" }}
@@ -618,6 +851,60 @@ function WeeklyTotals({
           </HoverCard>
         );
       })}
+
+      {/* Grand Total Cell */}
+      <HoverCard openDelay={200} closeDelay={100}>
+        <HoverCardTrigger asChild>
+          <div
+            className="w-[160px] flex-shrink-0 bg-gray-200 border-r p-2 text-center cursor-default hover:bg-gray-300 transition-colors flex flex-col items-center justify-center"
+            style={{ minHeight: "60px" }}
+          >
+            <div className="text-sm font-bold text-gray-800">
+              {grandTotals.total.toFixed(1)}h
+            </div>
+            <div className="text-xs text-green-600 font-medium">
+              {grandTotals.working.toFixed(1)}h work
+            </div>
+          </div>
+        </HoverCardTrigger>
+        {grandTotals.total > 0 && (
+          <HoverCardContent className="w-72" side="top">
+            <div className="space-y-3">
+              <div>
+                <h4 className="text-sm font-semibold">Weekly Grand Totals</h4>
+                <p className="text-xs text-muted-foreground">All agents combined</p>
+              </div>
+
+              <div className="space-y-1.5">
+                <h5 className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                  Activity Breakdown
+                </h5>
+                {grandTotals.activities.map(({ activityType, hours }) => (
+                  <div key={activityType.id} className="flex items-center gap-2">
+                    <div
+                      className="w-3 h-3 rounded-sm flex-shrink-0"
+                      style={{ backgroundColor: activityType.color }}
+                    />
+                    <span className="text-sm flex-1">{activityType.name}</span>
+                    <span className="text-sm font-medium">{hours.toFixed(1)}h</span>
+                  </div>
+                ))}
+              </div>
+
+              <div className="pt-2 border-t space-y-1">
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Total Hours:</span>
+                  <span className="font-bold">{grandTotals.total.toFixed(1)}h</span>
+                </div>
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Working Hours:</span>
+                  <span className="font-bold text-green-600">{grandTotals.working.toFixed(1)}h</span>
+                </div>
+              </div>
+            </div>
+          </HoverCardContent>
+        )}
+      </HoverCard>
     </div>
   );
 }

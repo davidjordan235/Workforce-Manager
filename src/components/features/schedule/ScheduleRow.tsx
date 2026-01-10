@@ -19,6 +19,7 @@ interface ScheduleRowProps {
   selectedEntryId: string | null;
   pasteTarget: { agentId: string; slotIndex: number } | null;
   hasClipboard: boolean;
+  isClockedIn?: boolean;
   onEntrySelect: (entryId: string) => void;
   onSlotClick: (agentId: string, slotIndex: number) => void;
   onEntryMove: (entryId: string, newStartTime: string, newEndTime: string, newDate?: string) => void;
@@ -38,6 +39,7 @@ export function ScheduleRow({
   selectedEntryId,
   pasteTarget,
   hasClipboard,
+  isClockedIn,
   onEntrySelect,
   onSlotClick,
   onEntryMove,
@@ -66,8 +68,17 @@ export function ScheduleRow({
   return (
     <div className="flex border-b hover:bg-gray-50/50 relative" style={{ height: "48px" }}>
       {/* Agent info (sticky) */}
-      <AgentHoursSummary agent={agent} entries={entries} activities={activities}>
+      <AgentHoursSummary agent={agent} entries={entries} activities={activities} isClockedIn={isClockedIn}>
         <div className="sticky left-0 z-20 w-48 flex-shrink-0 bg-white border-r p-2 flex items-center gap-2 cursor-pointer hover:bg-gray-50 transition-colors">
+          {/* Clock-in status indicator - reserve space even when not clocked in */}
+          <div className="w-2.5 h-2.5 flex-shrink-0 flex items-center justify-center">
+            {isClockedIn && (
+              <div
+                className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse"
+                title="Currently clocked in"
+              />
+            )}
+          </div>
           <div
             className="w-8 h-8 rounded-full flex items-center justify-center text-white text-xs font-bold flex-shrink-0"
             style={{ backgroundColor: agent.color || "#4CAF50" }}

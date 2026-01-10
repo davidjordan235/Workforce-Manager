@@ -133,6 +133,9 @@ model Agent {
   // Time clock enrollment
   techEnrollment TechEnrollment?
 
+  // Activity tracking (daily work logs)
+  activityLogs ActivityLog[]
+
   @@index([isActive])
   @@index([displayOrder])
   @@index([departmentId])
@@ -402,4 +405,27 @@ model TimePunch {
   @@index([enrollmentId])
   @@index([punchTime])
   @@index([enrollmentId, punchTime])
+}
+
+// ============================================
+// ACTIVITY TRACKING (Daily Work Logs)
+// ============================================
+
+model ActivityLog {
+  id          String   @id @default(cuid())
+  agentId     String
+  date        DateTime @db.Date      // The date of the activity
+  startTime   DateTime              // Start time of the activity
+  endTime     DateTime              // End time of the activity
+  description String                // What the employee worked on
+  category    String?               // Optional category (e.g., "Meeting", "Development", "Admin")
+  notes       String?               // Additional notes
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  agent       Agent    @relation(fields: [agentId], references: [id], onDelete: Cascade)
+
+  @@index([agentId])
+  @@index([date])
+  @@index([agentId, date])
 }
